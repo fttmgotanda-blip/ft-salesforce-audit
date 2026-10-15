@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.4
+// @version      1.6.5
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -492,16 +492,7 @@
         ['携帯トス成功可否',393],['携帯トス失敗理由',394],['携帯トス投入日',396]
       ].forEach(([label,row])=>empty(label,row,'10/9版のマニュアルでは入力・選択禁止です。'));
 
-      // 運用変更：バレッドライフコンシェルジュ成功可否欄は「対象外」の選択を許可。
-      {
-        const label='バレッドライフコンシェルジュ成功可否';
-        const f=field(label);
-        if(unknown(f)) pending(label,403,'画面から選択状態を確認できません。',label);
-        else if(f.state==='空欄候補') emit(label,403,'適合候補','空欄のため入力禁止条件に該当しません。',label);
-        else if(f.state==='値あり' && /^(?:[0-9]+[.．、]\s*)?対象外$/.test(normalize(f.value)))
-          emit(label,403,'適合候補','「対象外」の選択は許可されています。',label);
-        else emit(label,403,'要修正候補','成功可否は空欄または「対象外」が許可されています。その他の選択内容は確認してください。',label);
-      }
+      // 一時対象外：バレッドライフコンシェルジュ成功可否（403行）は判定しない。
       // 失敗理由・投入日は引き続き空欄とする。
       [
         ['バレッドライフコンシェルジュ失敗理由',404],
@@ -521,7 +512,8 @@
       sizeLimit(['都道府県','市区郡','町村','丁目','番地','建物','棟','階数','部屋番号'],110,50,'設置先住所［50文字以内］');
       sizeLimit(['市区郡','町村','丁目','番地'],111,30,'市区町村～番地［30文字以内］');
       if(apartment){
-        [['建物',115],['棟',116],['部屋番号',117]].forEach(([name,row])=>required(name,row,'マンションタイプで必須とされています。'));
+        [['建物',115],['部屋番号',117]].forEach(([name,row])=>required(name,row,'マンションタイプで必須とされています。'));
+        // 棟（116行）の単独必須チェックは一時対象外。ホーム集合住宅のA/B照合は維持。
       } else if(menu===null || !knownType){
         pending('マンション住所の必須条件',115,'申込メニューを判別できません。','お申し込みメニュー');
       }
@@ -857,7 +849,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.4</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.5</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
@@ -1107,7 +1099,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.6.4｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.5｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

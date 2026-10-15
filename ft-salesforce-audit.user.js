@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.6
+// @version      1.6.7
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -827,14 +827,16 @@
     shadow.innerHTML=`
       <style>
         *{box-sizing:border-box}
-        .panel{width:440px;max-width:calc(100vw - 16px);font:12px/1.55 -apple-system,BlinkMacSystemFont,Meiryo,sans-serif;color:#20384b;background:#fff;border:1px solid #ccd9e4;border-radius:10px;box-shadow:0 5px 23px #182f492f}
-        .head{background:#183955;color:#fff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700;border-radius:9px 9px 0 0;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none}
+        .panel{width:440px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);min-height:0;display:flex;flex-direction:column;overflow:hidden;font:12px/1.55 -apple-system,BlinkMacSystemFont,Meiryo,sans-serif;color:#20384b;background:#fff;border:1px solid #ccd9e4;border-radius:10px;box-shadow:0 5px 23px #182f492f}
+        .head{background:#183955;color:#fff;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;flex:0 0 auto;font-weight:700;border-radius:9px 9px 0 0;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none}
+        .head>span{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .head>div{display:flex;align-items:center;gap:6px;flex:0 0 auto}
         button{font:inherit;cursor:pointer;padding:7px 9px;border:1px solid #b6c9d8;border-radius:5px;background:#f8fbfd;color:#20425e}
         button:focus-visible{outline:2px solid #136c9e;outline-offset:2px}
-        .head button{padding:0 5px;color:#fff;border:0;background:transparent;font-size:19px}
-        .body{padding:10px}.note{font-size:11px;color:#506a7a}.buttons{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.primary{background:#136c9e;color:white;border-color:#136c9e}
+        .head button{display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;padding:0 5px;flex:0 0 auto;color:#fff;border:0;background:transparent;font-size:19px}
+        .body{padding:10px;min-height:0;flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin}.note{font-size:11px;color:#506a7a}.buttons{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.primary{background:#136c9e;color:white;border-color:#136c9e}
         .stats{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}.stat{background:#edf3f7;padding:5px 7px;border-radius:5px}.stat b{font-size:15px}
-        .tablebox{max-height:350px;overflow:auto;border:1px solid #dce5eb;border-radius:5px;margin-top:8px}
+        .tablebox{max-height:350px;max-height:min(350px,40vh);overflow:auto;border:1px solid #dce5eb;border-radius:5px;margin-top:8px}
         table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px 6px;text-align:left;vertical-align:top;border-bottom:1px solid #e3e9ee}th{background:#edf3f8;position:sticky;top:0}.bad{color:#b42318;font-weight:700}.good{color:#136d3c}.pending{color:#9d670f}.skip{color:#667}
         .jump{display:block;text-align:left;border:0;background:transparent;color:#17648a;padding:0;text-decoration:underline}
         .review{display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer;color:#405668;font-size:11px}
@@ -846,9 +848,8 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FTシステム | Salesforce 不備チェック v1.6.6</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
-        <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
         <div id="status" role="status">詳細タブを開いて実行してください。閉じた項目セクションはチェック時に一時展開します。</div>
@@ -857,8 +858,7 @@
         <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
         <div class="tablebox"><table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead><tbody id="items"><tr><td colspan="3">未実行</td></tr></tbody></table></div>
         <div id="copyFallback" style="display:none;margin-top:8px"><div class="note">項目名・判定・理由のみ（顧客入力値なし）。必要なら全選択して Ctrl+C でコピーできます。</div><textarea id="backup" readonly></textarea></div>
-        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。チェック時は一時展開後に復元、項目名クリック時は対象を見つけたら展開状態を維持して移動します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
-      </div></div>`;
+        </div></div>`;
     document.body.appendChild(host);
     const $=id=>shadow.getElementById(id);
     let latest=null, filter='未確認', reviewed=new Set(), navigating=false;
@@ -1096,7 +1096,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.6.6｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.6.7｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

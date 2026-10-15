@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.2
+// @version      1.6.3
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -439,11 +439,12 @@
       const apartment=menu!==null && /マンション/.test(menu);
 
       // 基本入力。システム上の項目名の差は正確に対応付け、見つからない場合は判定保留。
+      // 「丁目」は存在しない住所もあるため必須から除外。記載があれば住所文字数チェックには含める。
       [
         ['申込者名',18],['性別',21],['申込者生年月日',23],['携帯電話番号(日中連絡先)',24],
         ['説明書面進捗',38],['契約者性別',88],['契約者名(姓カナ)',89],['契約者名(名カナ)',90],
         ['契約者名(姓)',91],['契約者名(名)',92],['契約者生年月日',94],['契約者連絡先電話番号1',95],
-        ['郵便番号',109],['都道府県',110],['市区郡',111],['町村',112],['丁目',113],['番地',114],
+        ['郵便番号',109],['都道府県',110],['市区郡',111],['町村',112],['番地',114],
         ['設置先住所と異なる',152],['お申し込みのプロバイダ',167],['お申し込みメニュー',176],
         ['お申し込み内容',179],['Wi-Fiパック',182],['電話サービス申込方法',212],
         ['本人確認方法（携帯法用）',302],['KDDI紙請求書',332],['スタートサポート書類',384]
@@ -798,7 +799,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.2</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.3</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
@@ -1048,7 +1049,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.6.2｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.3｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

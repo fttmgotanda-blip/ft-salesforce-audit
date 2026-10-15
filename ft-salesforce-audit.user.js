@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         FT | Salesforce 不備チェック補助
+// @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.5.0
+// @version      1.5.1
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。

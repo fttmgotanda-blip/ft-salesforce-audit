@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.5.2
+// @version      1.6.0
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -39,7 +39,7 @@
           if (!el.getClientRects().length) continue;
           const s = (el.textContent || '').replace(/[\s\u3000]+/g, ' ').trim().replace(/[:：]$/, '');
           if (requiredLabels.has(s)) hits.add(s);
-          if (hits.size === requiredLabels.size) return true;
+          if (hits.size >= 2 && (hits.has('獲得ID') || hits.has('お申し込みメニュー'))) return true;
         }
         for (const el of root.querySelectorAll('*')) {
           if (el.shadowRoot) stack.push(el.shadowRoot);
@@ -80,7 +80,8 @@
   function startAudit() {
     'use strict';
     // 利用許可のある Salesforce 環境でのみご利用ください。
-    // Salesforceの更新、APIアクセス、画面の自動操作、外部送信、端末保存はしません。
+    // Salesforceレコードの更新、APIアクセス、外部送信、端末保存はしません。
+    // ユーザーがチェックを開始した場合のみ、項目セクションを一時展開し閉じ直します。
     // 読み取った入力値は実行中の照合にのみ利用し、UIの判定結果オブジェクトやコピーに保持しません。
     const HOST_ID = 'ft-sf-audit-v14';
     if (!document.body || document.getElementById(HOST_ID)) return;
@@ -291,6 +292,58 @@
       }
       return '';
     }
+    // 閉じたLightningの項目セクションを一時展開し、表示後に画面から読み取る。
+    // ボタンの絞り込みを厳格にし、保存・承認・外部リンク等の操作を行わない。
+    const waitForDom = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    function isSectionToggle(el) {
+      if (!isElement(el) || inTool(el) || !el.matches('button[aria-expanded],a[aria-expanded],[role="button"][aria-expanded]')) return false;
+      return el.matches('.slds-accordion__summary-action,.slds-section__title-action') ||
+        !!el.closest('.slds-accordion__summary,.slds-accordion__summary-heading,.slds-section__title');
+    }
+    function closedSectionButtons() {
+      const { roots } = getRoots();
+      const buttons = [];
+      for (const root of roots) {
+        for (const btn of root.querySelectorAll('button[aria-expanded="false"],a[aria-expanded="false"],[role="button"][aria-expanded="false"]')) {
+          if (isSectionToggle(btn) && visible(btn) && !/タイプ\s*[12](?!\d)/.test(clean(btn.textContent).normalize('NFKC'))) buttons.push(btn);
+        }
+      }
+      return buttons;
+    }
+    async function openSectionsForAudit() {
+      const opened = [], attempted = new WeakSet();
+      // 親セクションを開くと内側のトグルが現れるため段階的に展開する。
+      for (let round = 0; round < 6; round++) {
+        const buttons = closedSectionButtons().filter(b => !attempted.has(b));
+        if (!buttons.length) break;
+        for (const button of buttons) {
+          attempted.add(button);
+          const controls = button.getAttribute('aria-controls');
+          try { button.click(); opened.push({button, controls}); } catch { /* 読取不可として扱う */ }
+        }
+        await waitForDom(400);
+      }
+      return { opened, unopened: closedSectionButtons().length };
+    }
+    function restoreSections(opened) {
+      // 子→親の順で元の状態へ。利用者が元から開いていた部分は操作しない。
+      for (const {button, controls} of [...opened].reverse()) {
+        let target = button;
+        if (!target.isConnected && controls) {
+          const { roots } = getRoots();
+          target = null;
+          for (const root of roots) {
+            target = [...root.querySelectorAll('[aria-controls]')].find(b =>
+              b.getAttribute('aria-controls') === controls && isSectionToggle(b)) || null;
+            if (target) break;
+          }
+        }
+        if (target?.isConnected && target.getAttribute('aria-expanded') === 'true') {
+          try { target.click(); } catch { /* 利用者が手動で閉じられる */ }
+        }
+      }
+    }
+
     function scan() {
       const { roots, stats } = getRoots();
       const fields = [], signatures = new Set();
@@ -380,9 +433,8 @@
       function yesWord(v){return /^(?:有り|あり|有|申込あり|申込する)$/.test(v.replace(/^\d+\./,''));}
       const menu=val('お申し込みメニュー');
       const type3=menu!==null && /タイプ3/.test(menu);
-      const type2=menu!==null && /タイプ2/.test(menu);
-      const type1=menu!==null && /タイプ1/.test(menu);
-      const knownType=type1||type2||type3;
+      // 業務対象はタイプ3のみ。タイプ1/2専用のルールは実行しない。
+      const knownType=type3;
       const apartment=menu!==null && /マンション/.test(menu);
 
       // 基本入力。システム上の項目名の差は正確に対応付け、見つからない場合は判定保留。
@@ -432,7 +484,6 @@
       condition('対応商材',375,v=>v==='auひかりプラス','「auひかりプラス」である必要があります。');
       empty('申込書番号',145,'キャリア連携時に入力する項目です。');
       empty('待ちエントリ日',386,'この段階では記載不可です。');
-      empty('タイプ1-工事予約ID',245,'原則記載不可（KDDIから個別指示がある場合は担当者確認）。');
 
       // マニュアル2026/10/9版では、現在は携帯トス・バレッドライフ関連の選択／記載禁止。
       [
@@ -496,59 +547,27 @@
           const pattern=t.match(/\b(kwe|kof|kcm)\b/i)?.[1]?.toLowerCase()||'';
           let acceptable=null;
           if(brand==='nifty')acceptable=true;
-          else if(brand==='so-net')acceptable=type1||type2;
+          else if(brand==='so-net')acceptable=false;
           else if(brand==='biglobe') {
-            if(type1) acceptable=['kof','kcm'].includes(pattern);
-            else if(type2) acceptable=t.includes('タイプ2');
-            else if(type3)acceptable=['kwe','kof','kcm'].includes(pattern);
-            if(!pattern && !type2)acceptable=null;
+            acceptable=['kwe','kof','kcm'].includes(pattern);
+            if(!pattern)acceptable=null;
           }
           emit('プロバイダ［タイプ別許可］',167,acceptable===null?'判定保留':acceptable?'適合候補':'要修正候補',
             acceptable===null?'選択肢表記とタイプ別許可リストを照合できません。':acceptable?'マニュアルのタイプ別候補と一致しています。':'申込タイプでは利用不可のプロバイダ選択です。','お申し込みのプロバイダ');
         } else pending('プロバイダ［タイプ別許可］',167,'表示値を読み取れません。','お申し込みのプロバイダ');
       }
 
-      if(knownType){
-        if(type3){
-          [ ['選択ルート',45],['対応拠点',46],['回線速度',177],
-            ['タイプ3-回線設置先建物種別',261],['タイプ3-NTT東西',262],
-            ['タイプ3-申し込み区分',263],['タイプ3-既存プロバイダ契約有無',264],
-            ['タイプ3-他社光コラボ利用有無',265],['タイプ3-ひかり電話利用状況',271],
-            ['タイプ3-コラボ光テレビお申し込み',287]
-          ].forEach(([label,row])=>required(label,row,'タイプ3の必須項目です。'));
-          const speed=val('回線速度');
-          if(speed===null)pending('回線速度［選択値］',177,'回線速度の選択を取得できません。','回線速度');
-          else emit('回線速度［選択値］',177,['1ギガ','10ギガ'].includes(speed)?'適合候補':'要修正候補', ['1ギガ','10ギガ'].includes(speed)?'速度が1ギガ／10ギガです。':'タイプ3の速度は1ギガ／10ギガです。','回線速度');
-          // 上記の条件チェックは実際のラベル「回線速度」に対して行う。
-        } else {
-          // タイプ1/2申込ではタイプ3専用欄を使わない。
-          [ ['タイプ3-回線設置先建物種別',261],['タイプ3-NTT東西',262],
-            ['タイプ3-申し込み区分',263],['タイプ3-既存プロバイダ契約有無',264],
-            ['タイプ3-他社光コラボ利用有無',265],['タイプ3-ひかり電話利用状況',271]
-          ].forEach(([label,row])=>empty(label,row,'タイプ3以外では空欄です。'));
-        }
-        if(type2){
-          empty('回線速度',178,'タイプ2では記載不可です。');
-          empty('初期費用請求区分',330,'タイプ2では記載不可です。');
-        } else if(type1){
-          required('初期費用請求区分',329,'タイプ1では必須です。');
-          [ ['タイプ1-所有区分',235],['タイプ1-auひかりテレビお申し込み',237],
-            ['タイプ1-ご利用中の光回線',239],['タイプ1-光回線再利用有無',240]
-          ].forEach(([label,row])=>required(label,row,'タイプ1で必須です。'));
-          if(/シェアド|シェアポ/.test(menu))empty('回線速度',178,'タイプ1シェアドでは空欄です。');
-          else if(/自前/.test(menu))required('回線速度',177,'タイプ1自前は速度が必要です。');
-          else pending('タイプ1-回線速度［方式］',177,'自前・シェアドの別を確認できません。','お申し込みメニュー');
-        }
-        if(!type1){
-          [ ['タイプ1-所有区分',235],['タイプ1-設置先階数',236],['タイプ1-auひかりテレビお申し込み',237],
-            ['タイプ1-チャンネルパック',238],['タイプ1-ご利用中の光回線',239],
-            ['タイプ1-光回線再利用有無',240],['タイプ1-光回線再利用承諾番号',241],
-            ['タイプ1-工事希望日1',246],['タイプ1-工事希望時間帯1',247],
-            ['タイプ1-工事希望日2',248],['タイプ1-工事希望時間帯2',249],
-            ['タイプ1-工事希望日3',250],['タイプ1-工事希望時間帯3',251]
-          ].forEach(([label,row])=>empty(label,row,'タイプ1以外では原則空欄です。'));
-        }
-      } else pending('申込プラン別条件',176,'メニューからタイプ1・2・3を判別できません。','お申し込みメニュー');
+      if(type3){
+        [ ['選択ルート',45],['対応拠点',46],['回線速度',177],
+          ['タイプ3-回線設置先建物種別',261],['タイプ3-NTT東西',262],
+          ['タイプ3-申し込み区分',263],['タイプ3-既存プロバイダ契約有無',264],
+          ['タイプ3-他社光コラボ利用有無',265],['タイプ3-ひかり電話利用状況',271],
+          ['タイプ3-コラボ光テレビお申し込み',287]
+        ].forEach(([label,row])=>required(label,row,'タイプ3の必須項目です。'));
+        const speed=val('回線速度');
+        if(speed===null)pending('回線速度［選択値］',177,'回線速度の選択を取得できません。','回線速度');
+        else emit('回線速度［選択値］',177,['1ギガ','10ギガ'].includes(speed)?'適合候補':'要修正候補', ['1ギガ','10ギガ'].includes(speed)?'速度が1ギガ／10ギガです。':'タイプ3の速度は1ギガ／10ギガです。','回線速度');
+      } else pending('申込プラン別条件',176,'メニューからタイプ3を判別できません。','お申し込みメニュー');
 
       if(type3){
         const appClass=val('タイプ3-申し込み区分');
@@ -778,18 +797,18 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.5</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.0</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
-        <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。外部送信／更新なし。</div>
+        <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
-        <div id="status" role="status">詳細タブを開き、必要なセクションを展開して実行してください。</div>
+        <div id="status" role="status">詳細タブを開いて実行してください。閉じた項目セクションはチェック時に一時展開します。</div>
         <div id="counts" class="stats"></div>
         <div id="opSummary" class="opsummary" aria-live="polite">OP名称照合は未実行です。</div>
         <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
         <div class="tablebox"><table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead><tbody id="items"><tr><td colspan="3">未実行</td></tr></tbody></table></div>
         <div id="copyFallback" style="display:none;margin-top:8px"><div class="note">項目名・判定・理由のみ（顧客入力値なし）。必要なら全選択して Ctrl+C でコピーできます。</div><textarea id="backup" readonly></textarea></div>
-        <p class="note">※OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
+        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。閉じたセクションは一時展開後に復元します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
       </div></div>`;
     document.body.appendChild(host);
     const $=id=>shadow.getElementById(id);
@@ -848,30 +867,55 @@
       }
       if(!selected.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent=filter==='未確認'?'未確認の警告・判定保留はありません。ただし、案件全体の目視確認は必要です。':'この条件に該当する項目はありません。';tr.appendChild(td);$('items').appendChild(tr);}
     }
-    $('run').addEventListener('click',()=>{
+    function clearResults(message) {
+      latest=null;reviewed.clear();
+      $('copy').disabled=true;$('copyAll').disabled=true;
+      $('counts').replaceChildren();
+      $('opSummary').textContent='対象外のため照合は実施していません。';
+      $('items').replaceChildren();
+      const tr=document.createElement('tr'),td=document.createElement('td');
+      td.colSpan=3;td.textContent=message;tr.appendChild(td);$('items').appendChild(tr);
+      $('copyFallback').style.display='none';$('status').textContent=message;
+    }
+    $('run').addEventListener('click',async()=>{
       if (!isRecordDetailPage()) {
         $('status').textContent='申込共通の案件詳細画面でのみ実行できます。対象画面を開いてください。';
         return;
       }
-      $('status').textContent='表示中の項目を読み取り、照合しています…';
+      const runButton=$('run');
+      runButton.disabled=true;
+      $('status').textContent='閉じたセクションを一時展開し、項目を読み取っています…';
+      let opened=[];
       try{
+        const expansion=await openSectionsForAudit();
+        opened=expansion.opened;
         const d=scan();
         // auひかりプラス以外の商材へ誤って別マニュアルを適用しない。
         const product=d.fields.filter(f=>f.name==='商材'&&f.state==='値あり');
         if (product.length && !product.some(f=>/auひかりプラス/.test(f.value))) {
-          $('status').textContent='この案件はauひかりプラスではないため、チェックを実行しません。';
+          clearResults('この案件はauひかりプラスではないため、チェックを実行しません。');
+          return;
+        }
+        const menu=d.fields.find(f=>f.name==='お申し込みメニュー' && f.state==='値あり');
+        if (menu && /タイプ[12]/.test(normalize(menu.value))) {
+          clearResults('タイプ1・タイプ2は現在の業務対象外のため、チェックを実行しません。');
           return;
         }
         const res=runRules(d.fields);reviewed.clear();latest={fieldCount:d.fields.length,results:res};
-        $('status').textContent=`${res.length}件の試作ルールを判定しました。最終確認は目視で行ってください。再実行すると「目視済」チェックはリセットされます。`;
+        const unfinished=expansion.unopened;
+        $('status').textContent=`${res.length}件の試作ルールを判定しました。${unfinished?'展開できないセクションが'+unfinished+'件あり、該当項目は目視確認が必要です。':'閉じていたセクションも読み取りました。'} 最終判断は目視でお願いします。再実行で目視済チェックはリセットされます。`;
         $('copy').disabled=false;$('copyAll').disabled=false;$('copyFallback').style.display='none';filter='未確認';draw();
       }catch(e){$('status').textContent='読み取りエラーです。詳細タブを開き直してから再試行してください。';}
+      finally{
+        restoreSections(opened);
+        runButton.disabled=false;
+      }
     });
     $('filters').addEventListener('click',e=>{const f=e.target?.dataset?.filter;if(f){filter=f;draw();}});
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.5｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.0｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

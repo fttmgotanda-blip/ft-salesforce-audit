@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.9
+// @version      1.6.10
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -656,6 +656,13 @@
 
       // 電話オプション：「有り(電話(K))」「有り(電話(N))」と読める場合に限って分岐。
       const phone=val('電話サービス申込方法');
+      // 電話申込なしの選択値だけを厳格に分類。不明な値は空欄指定の対象にしない。
+      const phoneText=phone===null?'':normalize(phone).replace(/^[0-9]+[.．、]\s*/,'').trim();
+      const cleanedNoPhone=phoneText.replace(/^電話(?:サービス)?(?:の)?\s*/,'').replace(/^申込(?:み)?\s*/,'').trim();
+      const phoneKSelected=phone!==null && /電話\s*\(?K\)?/i.test(phoneText) && !/電話\s*\(?N\)?/i.test(phoneText);
+      const phoneNSelected=phone!==null && /電話\s*\(?N\)?/i.test(phoneText) && !/電話\s*\(?K\)?/i.test(phoneText);
+      const phoneNoneSelected=phone!==null && /^(?:なし|無し|無|未申込|申込なし|対象外)$/.test(cleanedNoPhone);
+      const noPhoneK=phoneNSelected||phoneNoneSelected;
       if(phone!==null){
         const isK=/電話\s*\(?K\)?/i.test(phone),isN=/電話\s*\(?N\)?/i.test(phone);
         const yesK=isK&&!isN,yesN=isN&&!isK;
@@ -666,14 +673,23 @@
             ['電話(K)-着信転送申込有無',225],['電話(K)-迷惑電話発着信ブロック申込有無',226],
             ['電話(K)-発信者番号通知',227],['電話(K)-番号案内電話帳掲載',228],
             ['本人確認種別（犯収法用）',303],['本人確認日（犯収法用）',305],
-            ['本人確認時刻（犯収法用）',307],['本人確認実施担当者氏名（携帯法/犯収法用）',309],
+            ['本人確認時刻（犯収法用）',307],
             ['職業',313],['利用用途(個人)',317],['疑わしい取引該当フラグ',319]
           ].forEach(([label,row])=>required(label,row,'電話(K)申込時に必要です。'));
           const occupation=val('職業');
-          if(occupation!==null && occupation.includes('その他'))required('職業備考欄',315,'職業「その他」の場合は説明が必要です。');
+          if(occupation!==null){
+            const job=normalize(occupation);
+            // 複数の職業が明確な区切りで列挙されている場合は備考必須。
+            // 「・」「／」は単一の職業区分名にも使われるため断定せず目視保留。
+            if(/その他/.test(job) || /[、,，;；]/.test(job) || /(?:複数職業|兼業)/.test(job))
+              required('職業備考欄',315,'職業が「その他」、または複数の職業が申告されている場合は備考が必要です。');
+            else if(/[・／/+＋]/.test(job))
+              pending('職業備考欄［複数職業の確認］',315,
+                '職業欄の区切りが単一の選択肢か複数職業かを確認し、複数なら備考欄の入力を確認してください。','職業備考欄');
+          }
           const suspect=val('疑わしい取引該当フラグ');
           if(suspect!==null && yesWord(suspect))required('必要項目備考欄',321,'該当理由の記載が必要です。');
-        }else{
+        }else if(noPhoneK){
           [['本人確認種別（犯収法用）',303],['本人確認日（犯収法用）',305],['本人確認時刻（犯収法用）',307],
             ['職業',313],['職業備考欄',315],['利用用途(個人)',317],['疑わしい取引該当フラグ',319],['必要項目備考欄',321]]
             .forEach(([label,row])=>empty(label,row,'電話(K)申込なしでは原則空欄です。'));
@@ -815,8 +831,27 @@
         }
       }
 
-      const identity=val('本人確認方法（携帯法用）');
-      if(identity!==null && identity.includes('受付時確認済'))required('本人確認実施担当者氏名（携帯法/犯収法用）',309,'受付時確認済の場合は担当者氏名が必要です。');
+      // 行309：「受付時確認済」（携帯法）と「電話(K)申込あり」（犯収法）は独立条件。
+      // どちらか一方でも該当する場合は必須。両方に該当しないことが明確なときのみ空欄指定。
+      const identityField=field('本人確認方法（携帯法用）');
+      const identityKnown=!unknown(identityField)&&identityField.state==='値あり';
+      const identity=identityKnown?normalize(identityField.value):null;
+      const identityAtReception=identity!==null && identity.includes('受付時確認済');
+      const staffLabel='本人確認実施担当者氏名（携帯法/犯収法用）';
+      if(identityAtReception||phoneKSelected){
+        required(staffLabel,309,
+          identityAtReception&&phoneKSelected
+            ?'受付時確認済かつ電話(K)申込ありのため、携帯法・犯収法の両方で必須です。'
+            :identityAtReception
+              ?'受付時確認済の場合は、電話(K)申込なしでも担当者氏名が必要です。'
+              :'電話(K)申込ありの場合は担当者氏名が必要です。');
+      }else if(identityKnown && noPhoneK){
+        empty(staffLabel,309,
+          '受付時確認済ではなく、電話(K)申込もないため担当者氏名は空欄です。');
+      }else{
+        pending(staffLabel,309,
+          '受付時確認済か電話(K)申込ありかの判断に必要な選択値を取得できません。担当者氏名の要否を目視確認してください。');
+      }
       return results;
     }
 
@@ -849,7 +884,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.6.9</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.6.10</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -1097,7 +1132,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.6.9｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.6.10｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

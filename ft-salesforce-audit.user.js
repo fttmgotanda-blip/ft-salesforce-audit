@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.0
+// @version      1.6.1
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -400,7 +400,8 @@
         const key=label+'|'+row;
         if(seen.has(key)) return;
         seen.add(key);
-        results.push({label,row,status,reason,target:field(targetLabel).labelNode||null});
+        const f=field(targetLabel);
+        results.push({label,row,status,reason,target:f.labelNode||null,targetLabel,targetSection:f.section||''});
       }
       function unknown(f){return f.state==='要確認'||f.missing||f.ambiguous;}
       function isValue(label){return field(label).state==='値あり'&&!unknown(field(label));}
@@ -797,7 +798,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.0</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.1</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
@@ -808,11 +809,11 @@
         <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
         <div class="tablebox"><table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead><tbody id="items"><tr><td colspan="3">未実行</td></tr></tbody></table></div>
         <div id="copyFallback" style="display:none;margin-top:8px"><div class="note">項目名・判定・理由のみ（顧客入力値なし）。必要なら全選択して Ctrl+C でコピーできます。</div><textarea id="backup" readonly></textarea></div>
-        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。閉じたセクションは一時展開後に復元します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
+        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。チェック時は一時展開後に復元、項目名クリック時は対象セクションを開いて移動します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
       </div></div>`;
     document.body.appendChild(host);
     const $=id=>shadow.getElementById(id);
-    let latest=null, filter='未確認', reviewed=new Set();
+    let latest=null, filter='未確認', reviewed=new Set(), navigating=false;
     const colors={'要修正候補':'bad','適合候補':'good','判定保留':'pending','対象外':'skip'};
     const needsHumanReview = (r) => r.status==='要修正候補'||r.status==='判定保留';
     const reviewKey = (r) => String(r.row)+'|'+r.label+'|'+r.status+'|'+r.reason;
@@ -830,6 +831,98 @@
       if(op.checked===0) return 'OP照合：登録8サービスについて照合対象がありません（辞書外OPは目視）';
       return `OP名称照合：対象${op.checked}件／名称一致${op.matched}件／不一致候補${op.mismatches}件／保留${op.pending}件／未識別・読取不可OP欄${op.unknown}件。`;
     }
+    // チェック後に項目が閉じたり再描画された場合も、移動時に対象を再特定する。
+    // 入力値は検索せず、表示中のフィールドラベルとセクション見出しのみで特定する。
+    function composedContains(ancestor, child) {
+      for(let p=child,n=0;p&&n<70;p=parentOf(p),n++) if(p===ancestor) return true;
+      return false;
+    }
+    function findVisibleLabel(name, section) {
+      if(!name) return null;
+      const matched=[];
+      for(const root of getRoots().roots){
+        for(const el of root.querySelectorAll(LABEL_SELECTOR)){
+          if(!inTool(el)&&visible(el)&&titleText(el)===name) matched.push(el);
+        }
+      }
+      if(!matched.length) return null;
+      return matched.find(el=>section&&sectionOf(el)===section) || matched[0];
+    }
+    function isToggleForTarget(button, target) {
+      const section=button.closest('.slds-accordion__section,.slds-section,records-record-layout-block,.pbSubsection');
+      if(section && composedContains(section,target)) return true;
+      const controls=button.getAttribute('aria-controls');
+      if(controls){
+        for(let p=target,n=0;p&&n<70;p=parentOf(p),n++){
+          if(p.id===controls) return true;
+        }
+      }
+      return false;
+    }
+    function closeUnrelatedSections(opened,target) {
+      // 目視したいフィールドに続くセクションだけを開いたまま残す。
+      for(const {button,controls} of [...opened].reverse()){
+        let current=button;
+        if(!current.isConnected && controls){
+          current=null;
+          for(const root of getRoots().roots){
+            current=[...root.querySelectorAll('[aria-controls]')].find(b=>
+              b.getAttribute('aria-controls')===controls && isSectionToggle(b))||null;
+            if(current) break;
+          }
+        }
+        if(!current?.isConnected || current.getAttribute('aria-expanded')!=='true') continue;
+        if(target && isToggleForTarget(current,target)) continue;
+        try{current.click();}catch{ /* 手動確認を継続 */ }
+      }
+    }
+    function emphasizeTarget(el){
+      const prev={outline:el.style.outline,outlineOffset:el.style.outlineOffset,background:el.style.backgroundColor};
+      el.style.outline='3px solid #e7a21a';
+      el.style.outlineOffset='4px';
+      el.style.backgroundColor='#fff1bd';
+      setTimeout(()=>{
+        if(!el.isConnected) return;
+        if(el.style.outline==='3px solid rgb(231, 162, 26)' || el.style.outline==='3px solid #e7a21a'){
+          el.style.outline=prev.outline;
+          el.style.outlineOffset=prev.outlineOffset;
+          el.style.backgroundColor=prev.background;
+        }
+      },3500);
+    }
+    async function jumpToResult(r){
+      if(navigating || $('run').disabled) return;
+      navigating=true;
+      $('status').textContent='移動先の項目を探しています…';
+      try{
+        let target=(r.target && visible(r.target)) ? r.target : findVisibleLabel(r.targetLabel,r.targetSection);
+        if(!target){
+          // チェック時に閉じ直したセクションを、移動操作時だけ再度開く。
+          const expansion=await openSectionsForAudit();
+          target=(r.target && visible(r.target)) ? r.target : findVisibleLabel(r.targetLabel,r.targetSection);
+          if(!target){
+            restoreSections(expansion.opened);
+            $('status').textContent='「'+r.targetLabel+'」を画面上に見つけられません。セクションを手動で開くか、項目名の表記を確認してください。';
+            return;
+          }
+          closeUnrelatedSections(expansion.opened,target);
+          await waitForDom(200);
+          if(!visible(target)) target=findVisibleLabel(r.targetLabel,r.targetSection);
+        }
+        if(!target || !visible(target)){
+          $('status').textContent='移動先の項目が表示されません。該当セクションを手動で開いて確認してください。';
+          return;
+        }
+        target.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'});
+        emphasizeTarget(target);
+        $('status').textContent='「'+r.targetLabel+'」へ移動しました。該当セクションは開いたままです。';
+      }catch{
+        $('status').textContent='移動できませんでした。該当セクションを手動で開いてご確認ください。';
+      }finally{
+        navigating=false;
+      }
+    }
+
     function draw() {
       if(!latest) return;
       $('counts').replaceChildren();
@@ -847,8 +940,8 @@
       for(const r of selected){
         const tr=document.createElement('tr'),a=document.createElement('td'),b=document.createElement('td'),c=document.createElement('td');
         if(reviewed.has(reviewKey(r))) tr.classList.add('reviewed');
-        const link=document.createElement('button');link.type='button';link.className='jump';link.textContent=r.label + '（行'+r.row+'）';link.disabled=!r.target;
-        link.addEventListener('click',()=>{if(r.target?.isConnected)r.target.scrollIntoView({behavior:'smooth',block:'center'});});
+        const link=document.createElement('button');link.type='button';link.className='jump';link.textContent=r.label + '（行'+r.row+'）';
+        link.addEventListener('click',()=>{void jumpToResult(r);});
         a.appendChild(link);
         const st=document.createElement('div');st.className=colors[r.status]||'pending';st.textContent=r.status;
         const why=document.createElement('div');why.textContent=r.reason;b.append(st,why);
@@ -915,7 +1008,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.6.0｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.1｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

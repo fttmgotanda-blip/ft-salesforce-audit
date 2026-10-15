@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.7
+// @version      1.6.8
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -488,9 +488,22 @@
       empty('申込書番号',145,'キャリア連携時に入力する項目です。');
       empty('待ちエントリ日',386,'この段階では記載不可です。');
 
-      // 携帯トス関連は従来どおり空欄指定。
+      // 運用変更：携帯トス成功可否は「対象外」の選択も許可。
+      // 未入力または対象外は適合候補、判別不可は保留、それ以外は要修正候補。
+      {
+        const label='携帯トス成功可否';
+        const f=field(label);
+        if(unknown(f)) pending(label,393,'画面から選択状態を確認できません。',label);
+        else if(f.state==='空欄候補')
+          emit(label,393,'適合候補','空欄、または「対象外」が許可されています。',label);
+        else if(f.state==='値あり' && /^(?:[0-9]+[.．、]\s*)?対象外$/.test(normalize(f.value)))
+          emit(label,393,'適合候補','「対象外」の選択は許可されています。',label);
+        else
+          emit(label,393,'要修正候補','成功可否欄は空欄または「対象外」が許可されています。その他の選択内容は確認してください。',label);
+      }
+      // 失敗理由・投入日は引き続き空欄指定。
       [
-        ['携帯トス成功可否',393],['携帯トス失敗理由',394],['携帯トス投入日',396]
+        ['携帯トス失敗理由',394],['携帯トス投入日',396]
       ].forEach(([label,row])=>empty(label,row,'10/9版のマニュアルでは入力・選択禁止です。'));
 
       // 一時対象外：バレッドライフコンシェルジュ成功可否（403行）は判定しない。
@@ -1096,7 +1109,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.6.7｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.6.8｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

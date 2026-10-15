@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.0
+// @version      1.7.1
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -578,14 +578,30 @@
         }
       } else pending('説明書面発送日・高齢者フロー',41,'説明書面進捗を確認できません。','説明書面進捗');
 
-      // マニュアル192行はタイプ限定ではなく各ISP共通。
-      const op=field('プロバイダOP1');
-      if(unknown(op))pending('プロバイダOP1［おトクプラン］',192,'表示値を読み取れません。','プロバイダOP1');
-      else if(op.state!=='値あり')emit('プロバイダOP1［おトクプラン］',192,'要修正候補','必須のおトクプラン（2年契約）が未選択の可能性があります。','プロバイダOP1');
-      else {
-        const txt=normalize(op.value);
-        const ok=/おトクプラン/.test(txt)&&/2年/.test(txt);
-        emit('プロバイダOP1［おトクプラン］',192,ok?'適合候補':'要修正候補',ok?'必須プランの表示が確認できました。':'おトクプラン（2年契約）を選択してください。','プロバイダOP1');
+      // 前後確一本化案件が「対象」の場合だけ、OP1とOP2～16の照合を実行。
+      // 未取得や想定外の値の場合は、誤ったOP警告を出さず保留にする。
+      const unification=field('前後確一本化案件');
+      const unificationChoice=!unknown(unification)&&unification.state==='値あり'
+        ? normalize(unification.value).replace(/^[0-9]+[.．、]\s*/,'').trim() : null;
+      const opCheckEnabled=unificationChoice==='対象';
+      if(!opCheckEnabled){
+        if(unificationChoice==='対象外'){
+          emit('OPチェック［前後確一本化案件］',192,'対象外',
+            '前後確一本化案件が「対象外」のため、OP関連チェックを実施しません。','前後確一本化案件');
+        } else {
+          pending('OPチェック［前後確一本化案件］',192,
+            '前後確一本化案件の「対象」を確認できないため、OP関連のチェックは保留です。','前後確一本化案件');
+        }
+      }
+      if(opCheckEnabled){
+        const op=field('プロバイダOP1');
+        if(unknown(op))pending('プロバイダOP1［おトクプラン］',192,'表示値を読み取れません。','プロバイダOP1');
+        else if(op.state!=='値あり')emit('プロバイダOP1［おトクプラン］',192,'要修正候補','必須のおトクプラン（2年契約）が未選択の可能性があります。','プロバイダOP1');
+        else {
+          const txt=normalize(op.value);
+          const ok=/おトクプラン/.test(txt)&&/2年/.test(txt);
+          emit('プロバイダOP1［おトクプラン］',192,ok?'適合候補':'要修正候補',ok?'必須プランの表示が確認できました。':'おトクプラン（2年契約）を選択してください。','プロバイダOP1');
+        }
       }
 
       // プロバイダ許可リストをタイプ別に適用。未対応の選択肢は判定保留。
@@ -735,6 +751,7 @@
         }
       }else pending('電話申込方法［詳細条件］',212,'電話サービスの申込方法を取得できません。','電話サービス申込方法');
 
+      if(opCheckEnabled){
       // 投入備考に名称があれば申込あり。名称の存在でOP2～16と双方向照合する。
       // 辞書はユーザー提供のBIGLOBE 8サービス。辞書外は安全側の「判定保留」。
       // 顧客入力の原文は結果やコピーへ含めない。料金・AC備考の照合は対象外。
@@ -831,6 +848,7 @@
         }
       }
 
+      }
       // 行309：「受付時確認済」（携帯法）と「電話(K)申込あり」（犯収法）は独立条件。
       // どちらか一方でも該当する場合は必須。両方に該当しないことが明確なときのみ空欄指定。
       const identityField=field('本人確認方法（携帯法用）');
@@ -884,7 +902,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.0</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.1</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -907,10 +925,13 @@
       const count=status=>checks.filter(r=>r.status===status).length;
       const unknown=results.filter(r=>r.label.startsWith('未識別OP選択｜') || r.label==='読み取り不可OP欄').length;
       const unscanned=results.some(r=>r.label==='投入備考［OP照合］' && r.status==='判定保留');
+      const gate=results.find(r=>r.label==='OPチェック［前後確一本化案件］');
       const namesMatch=count('適合候補');
-      return {checked:checks.length,matched:namesMatch,mismatches:count('要修正候補'),pending:count('判定保留'),unknown,unscanned};
+      return {checked:checks.length,matched:namesMatch,mismatches:count('要修正候補'),pending:count('判定保留'),unknown,unscanned,gateStatus:gate?.status||null};
     }
     function opSummaryLine(op){
+      if(op.gateStatus==='対象外') return 'OPチェック：前後確一本化案件が「対象外」のためスキップ';
+      if(op.gateStatus==='判定保留') return 'OPチェック：前後確一本化案件の区分が未確認のため保留';
       if(op.unscanned) return 'OP照合：投入備考を取得できず判定保留';
       if(op.checked===0) return 'OP照合：登録8サービスについて照合対象がありません（辞書外OPは目視）';
       return `OP名称照合：対象${op.checked}件／名称一致${op.matched}件／不一致候補${op.mismatches}件／保留${op.pending}件／未識別・読取不可OP欄${op.unknown}件。`;
@@ -1053,14 +1074,14 @@
       const os=summarizeOp(latest.results);
       $('opSummary').replaceChildren();
       const strong=document.createElement('strong');strong.textContent=opSummaryLine(os);
-      const small=document.createElement('span');small.className='small';small.textContent='一致は登録8サービスの名称照合結果です。OP1・電話(K)・Wi-Fiパックは別ルール。料金・AC備考は本ツールのチェック対象外です。';
+      const small=document.createElement('span');small.className='small';small.textContent=os.gateStatus==='対象外' ? 'OP1・OP2～16・投入備考とのOP関連照合をスキップしました。電話・Wi-Fi等の通常入力チェックは継続します。' : os.gateStatus==='判定保留' ? '一本化区分を確認してからOPチェックを実施してください。' : '一致は登録8サービスの名称照合結果です。OP1・電話(K)・Wi-Fiパックは別ルール。料金・AC備考は本ツールのチェック対象外です。';
       $('opSummary').append(strong,small);
       const flags=latest.results.filter(needsHumanReview);
       const reviewedCount=flags.filter(r=>reviewed.has(reviewKey(r))).length;
       const set=[['検出ラベル',latest.fieldCount],['試作ルール',latest.results.length],['要修正候補',latest.results.filter(r=>r.status==='要修正候補').length],['判定保留',latest.results.filter(r=>r.status==='判定保留').length],['目視済（警告）',reviewedCount+'/'+flags.length]];
       for(const [name,num] of set){const sp=document.createElement('span');sp.className='stat';sp.textContent=name+' ';const b=document.createElement('b');b.textContent=num;sp.appendChild(b);$('counts').appendChild(sp);}
       $('items').replaceChildren();
-      const selected=latest.results.filter(r=>filter==='すべて'||(filter==='未確認' ? needsHumanReview(r)&&!reviewed.has(reviewKey(r)) : filter==='OP照合' ? r.label.startsWith('OP照合｜') || r.label.startsWith('未識別OP選択｜') || r.label==='読み取り不可OP欄' || r.label==='投入備考［OP照合］' : r.status===filter));
+      const selected=latest.results.filter(r=>filter==='すべて'||(filter==='未確認' ? needsHumanReview(r)&&!reviewed.has(reviewKey(r)) : filter==='OP照合' ? r.label.startsWith('OP照合｜') || r.label.startsWith('未識別OP選択｜') || r.label==='読み取り不可OP欄' || r.label==='投入備考［OP照合］' || r.label==='OPチェック［前後確一本化案件］' : r.status===filter));
       for(const r of selected){
         const tr=document.createElement('tr'),a=document.createElement('td'),b=document.createElement('td'),c=document.createElement('td');
         if(reviewed.has(reviewKey(r))) tr.classList.add('reviewed');
@@ -1132,7 +1153,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.7.0｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.7.1｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.3
+// @version      1.6.4
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -487,13 +487,26 @@
       empty('申込書番号',145,'キャリア連携時に入力する項目です。');
       empty('待ちエントリ日',386,'この段階では記載不可です。');
 
-      // マニュアル2026/10/9版では、現在は携帯トス・バレッドライフ関連の選択／記載禁止。
+      // 携帯トス関連は従来どおり空欄指定。
       [
-        ['携帯トス成功可否',393],['携帯トス失敗理由',394],['携帯トス投入日',396],
-        ['バレッドライフコンシェルジュ成功可否',403],
+        ['携帯トス成功可否',393],['携帯トス失敗理由',394],['携帯トス投入日',396]
+      ].forEach(([label,row])=>empty(label,row,'10/9版のマニュアルでは入力・選択禁止です。'));
+
+      // 運用変更：バレッドライフコンシェルジュ成功可否欄は「対象外」の選択を許可。
+      {
+        const label='バレッドライフコンシェルジュ成功可否';
+        const f=field(label);
+        if(unknown(f)) pending(label,403,'画面から選択状態を確認できません。',label);
+        else if(f.state==='空欄候補') emit(label,403,'適合候補','空欄のため入力禁止条件に該当しません。',label);
+        else if(f.state==='値あり' && /^(?:[0-9]+[.．、]\s*)?対象外$/.test(normalize(f.value)))
+          emit(label,403,'適合候補','「対象外」の選択は許可されています。',label);
+        else emit(label,403,'要修正候補','成功可否は空欄または「対象外」が許可されています。その他の選択内容は確認してください。',label);
+      }
+      // 失敗理由・投入日は引き続き空欄とする。
+      [
         ['バレッドライフコンシェルジュ失敗理由',404],
         ['バレッドライフコンシェルジュ投入日',405]
-      ].forEach(([label,row])=>empty(label,row,'10/9版のマニュアルでは入力・選択禁止です。'));
+      ].forEach(([label,row])=>empty(label,row,'理由・投入日は入力対象外です。'));
 
       // 共通形式チェック。入力は無い時点で必須ルール側が指摘するので形式判定は対象外。
       for(const [label,row,rx,message] of [
@@ -511,6 +524,51 @@
         [['建物',115],['棟',116],['部屋番号',117]].forEach(([name,row])=>required(name,row,'マンションタイプで必須とされています。'));
       } else if(menu===null || !knownType){
         pending('マンション住所の必須条件',115,'申込メニューを判別できません。','お申し込みメニュー');
+      }
+
+      // DB不備チェック 115～117行：
+      // ホームで集合住宅を受け付けた場合、A（棟名と部屋番号を専用欄に入力）か
+      // B（いずれか不明なら番地に判明している住所情報すべてを入力）のどちらか。
+      // 番地に「全情報」が入っているかは自動確定できないため、Bは原則目視保留。
+      if(type3 && menu !== null && /ホーム/i.test(menu)){
+        const category=field('タイプ3-回線設置先建物種別');
+        if(unknown(category) || category.state!=='値あり'){
+          pending('ホーム集合住宅［住所記載方式］',115,
+            '建物種別を読み取れないため、集合住宅かどうか確認してください。集合住宅の場合は棟名・部屋番号、または番地欄への全情報記載が必要です。',
+            'タイプ3-回線設置先建物種別');
+        }else if(/(?:集合住宅|共同住宅|マンション|アパート)/.test(normalize(category.value))){
+          const tower=field('棟');
+          const room=field('部屋番号');
+          const lot=field('番地');
+          if([tower,room,lot].some(unknown)){
+            pending('ホーム集合住宅［住所記載方式］',115,
+              '棟・部屋番号・番地のいずれかを読み取れません。AまたはBの形式で記載されているか確認してください。',
+              '番地');
+          }else if(tower.state==='値あり' && room.state==='値あり'){
+            emit('ホーム集合住宅［住所記載方式］',115,'適合候補',
+              'A方式：棟名と部屋番号の入力を確認しました。住所内容の正確性は目視確認してください。','棟');
+          }else if(lot.state!=='値あり'){
+            emit('ホーム集合住宅［住所記載方式］',115,'要修正候補',
+              'A方式の棟名・部屋番号が揃っておらず、B方式の番地欄にも記載がありません。','番地');
+          }else{
+            const lotText=nameKey(lot.value);
+            // A方式の片方だけが専用欄に記載されている場合、
+            // B方式の番地欄にその既知情報も記載されているか比較する。
+            const known=[
+              ['棟名',tower],
+              ['部屋番号',room]
+            ].filter(([,f])=>f.state==='値あり');
+            const notInLot=known.filter(([,f])=>!lotText.includes(nameKey(f.value))).map(([n])=>n);
+            if(notInLot.length){
+              emit('ホーム集合住宅［住所記載方式］',115,'要修正候補',
+                'B方式では番地欄に全情報を記載する必要があります。専用欄の'+notInLot.join('・')+'にある情報が番地欄で確認できません。','番地');
+            }else{
+              pending('ホーム集合住宅［住所記載方式］',115,
+                'B方式の可能性があります。番地欄に棟名・部屋番号など、判明している住所情報がすべて記載されているか目視確認してください。',
+                '番地');
+            }
+          }
+        }
       }
 
       // マニュアル38～44行の説明書面フロー。
@@ -799,7 +857,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.3</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.4</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
@@ -1049,7 +1107,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.6.3｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.4｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

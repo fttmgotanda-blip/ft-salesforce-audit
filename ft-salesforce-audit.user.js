@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.8
+// @version      1.6.9
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -488,19 +488,7 @@
       empty('申込書番号',145,'キャリア連携時に入力する項目です。');
       empty('待ちエントリ日',386,'この段階では記載不可です。');
 
-      // 運用変更：携帯トス成功可否は「対象外」の選択も許可。
-      // 未入力または対象外は適合候補、判別不可は保留、それ以外は要修正候補。
-      {
-        const label='携帯トス成功可否';
-        const f=field(label);
-        if(unknown(f)) pending(label,393,'画面から選択状態を確認できません。',label);
-        else if(f.state==='空欄候補')
-          emit(label,393,'適合候補','空欄、または「対象外」が許可されています。',label);
-        else if(f.state==='値あり' && /^(?:[0-9]+[.．、]\s*)?対象外$/.test(normalize(f.value)))
-          emit(label,393,'適合候補','「対象外」の選択は許可されています。',label);
-        else
-          emit(label,393,'要修正候補','成功可否欄は空欄または「対象外」が許可されています。その他の選択内容は確認してください。',label);
-      }
+      // 携帯トス成功可否（行393）は運用変更によりチェック対象外とする。
       // 失敗理由・投入日は引き続き空欄指定。
       [
         ['携帯トス失敗理由',394],['携帯トス投入日',396]
@@ -861,7 +849,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.6.9</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -1109,7 +1097,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.6.8｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.6.9｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

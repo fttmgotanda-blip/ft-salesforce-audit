@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @namespace    https://firstteam.local/userscripts
-// @version      1.6.1
+// @version      1.6.2
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -798,7 +798,7 @@
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.1</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>FT｜不備チェック 補助 v1.6.2</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="note">auひかりプラス｜DB不備チェック 2026/10/09版の一部ルール＋投入備考OP名称照合（登録8サービス）。対象はタイプ3のみ。レコード変更・外部送信なし。</div>
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
@@ -809,7 +809,7 @@
         <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
         <div class="tablebox"><table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead><tbody id="items"><tr><td colspan="3">未実行</td></tr></tbody></table></div>
         <div id="copyFallback" style="display:none;margin-top:8px"><div class="note">項目名・判定・理由のみ（顧客入力値なし）。必要なら全選択して Ctrl+C でコピーできます。</div><textarea id="backup" readonly></textarea></div>
-        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。チェック時は一時展開後に復元、項目名クリック時は対象セクションを開いて移動します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
+        <p class="note">※対象はタイプ3のみ。タイプ1・2の専用チェックは除外。チェック時は一時展開後に復元、項目名クリック時は対象を見つけたら展開状態を維持して移動します。OP照合は辞書登録8サービス中心。OP料金とAC備考のチェックは対象外です。辞書外OPは目視してください。目視済チェックはページ内だけの一時状態で、再実行・再読み込み時に消えます。『空欄候補』は入力状態を示すもので、単独では不備と断定しません。『なし』などの有効な選択値と空欄を区別します。2026/10/09版の一部ルールを使用。マニュアル変更時はスクリプト更新が必要。「要修正候補」は自動差戻しを意味しません。「適合候補」は掲載ルールの範囲だけです。通話ログ照合・自由記述の正確性・未実装ルールは人が確認してください。顧客入力値は表示／コピーしません。</p>
       </div></div>`;
     document.body.appendChild(host);
     const $=id=>shadow.getElementById(id);
@@ -846,35 +846,79 @@
         }
       }
       if(!matched.length) return null;
-      return matched.find(el=>section&&sectionOf(el)===section) || matched[0];
-    }
-    function isToggleForTarget(button, target) {
-      const section=button.closest('.slds-accordion__section,.slds-section,records-record-layout-block,.pbSubsection');
-      if(section && composedContains(section,target)) return true;
-      const controls=button.getAttribute('aria-controls');
-      if(controls){
-        for(let p=target,n=0;p&&n<70;p=parentOf(p),n++){
-          if(p.id===controls) return true;
-        }
+      if(section){
+        const inSection=matched.filter(el=>sectionOf(el)===section);
+        if(inSection.length===1) return inSection[0];
+        // 同名欄が複数ある時は、間違った入力欄へ移動させない。
+        return matched.length===1 ? matched[0] : null;
       }
-      return false;
+      return matched.length===1 ? matched[0] : null;
     }
-    function closeUnrelatedSections(opened,target) {
-      // 目視したいフィールドに続くセクションだけを開いたまま残す。
-      for(const {button,controls} of [...opened].reverse()){
-        let current=button;
-        if(!current.isConnected && controls){
-          current=null;
-          for(const root of getRoots().roots){
-            current=[...root.querySelectorAll('[aria-controls]')].find(b=>
-              b.getAttribute('aria-controls')===controls && isSectionToggle(b))||null;
-            if(current) break;
+    // 特定の項目だけを探すため、関係ないトグルは検索後に元へ戻す。
+    // Salesforceのアコーディオンは兄弟を開くと前のセクションを閉じる場合があるため、
+    // 見つかった後には別のトグルを一切触らない。
+    function toggleScope(button) {
+      const section=button.closest('.slds-accordion__section,.slds-section,records-record-layout-block,.pbSubsection');
+      if(section) return section;
+      const id=button.getAttribute('aria-controls');
+      if(!id) return null;
+      for(const root of getRoots().roots) {
+        const match=[...root.querySelectorAll('[id]')].find(el=>el.id===id);
+        if(match) return match;
+      }
+      return null;
+    }
+    function toggleRelevance(button, r) {
+      let priority=0;
+      const original=r.target;
+      if(original?.isConnected){
+        const scope=toggleScope(button);
+        if(scope && composedContains(scope,original)) priority+=100;
+      }
+      const heading=clean(button.textContent).normalize('NFKC');
+      const sectionName=clean(r.targetSection).normalize('NFKC');
+      if(sectionName && (heading===sectionName || heading.includes(sectionName))) priority+=30;
+      return priority;
+    }
+    async function revealTarget(r){
+      const resolved=()=> {
+        const original=r.target;
+        if(original?.isConnected && visible(original) && titleText(original)===r.targetLabel) return original;
+        return findVisibleLabel(r.targetLabel,r.targetSection);
+      };
+      let target=resolved();
+      if(target) return target;
+      const tried=new WeakSet();
+      let count=0;
+      async function search(scope,depth){
+        if(depth>6 || count>=45) return null;
+        const candidates=closedSectionButtons()
+          .filter(b=>!tried.has(b) && (!scope || composedContains(scope,b)))
+          .sort((a,b)=>toggleRelevance(b,r)-toggleRelevance(a,r));
+        for(const button of candidates){
+          if(count>=45) break;
+          if(!button.isConnected || !visible(button) || button.getAttribute('aria-expanded')!=='false') continue;
+          tried.add(button);
+          count++;
+          try{ button.click(); }catch{ continue; }
+          await waitForDom(250);
+          target=resolved();
+          if(target) return target;
+          const innerScope=toggleScope(button);
+          // まず開いたセクション内の入れ子トグルを探索。
+          if(innerScope) {
+            target=await search(innerScope,depth+1);
+            if(target) return target;
+          }
+          // 違うセクションだった時だけ閉じる。見つかった側は必ず開いたまま。
+          if(button.isConnected && button.getAttribute('aria-expanded')==='true'){
+            try{button.click();}catch{ /* 開閉不可の場合は目視確認 */ }
+            await waitForDom(75);
           }
         }
-        if(!current?.isConnected || current.getAttribute('aria-expanded')!=='true') continue;
-        if(target && isToggleForTarget(current,target)) continue;
-        try{current.click();}catch{ /* 手動確認を継続 */ }
+        return null;
       }
+      return await search(null,0);
     }
     function emphasizeTarget(el){
       const prev={outline:el.style.outline,outlineOffset:el.style.outlineOffset,background:el.style.backgroundColor};
@@ -895,25 +939,21 @@
       navigating=true;
       $('status').textContent='移動先の項目を探しています…';
       try{
-        let target=(r.target && visible(r.target)) ? r.target : findVisibleLabel(r.targetLabel,r.targetSection);
-        if(!target){
-          // チェック時に閉じ直したセクションを、移動操作時だけ再度開く。
-          const expansion=await openSectionsForAudit();
-          target=(r.target && visible(r.target)) ? r.target : findVisibleLabel(r.targetLabel,r.targetSection);
-          if(!target){
-            restoreSections(expansion.opened);
-            $('status').textContent='「'+r.targetLabel+'」を画面上に見つけられません。セクションを手動で開くか、項目名の表記を確認してください。';
-            return;
-          }
-          closeUnrelatedSections(expansion.opened,target);
-          await waitForDom(200);
-          if(!visible(target)) target=findVisibleLabel(r.targetLabel,r.targetSection);
-        }
+        let target=await revealTarget(r);
         if(!target || !visible(target)){
-          $('status').textContent='移動先の項目が表示されません。該当セクションを手動で開いて確認してください。';
+          $('status').textContent='「'+r.targetLabel+'」へ移動できません。該当セクションを手動で開いて確認してください。';
           return;
         }
-        target.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'});
+        // Lightning側の描画が落ち着いてから、別の開閉操作はせず移動する。
+        await waitForDom(300);
+        if(!target.isConnected || !visible(target)){
+          target=findVisibleLabel(r.targetLabel,r.targetSection);
+        }
+        if(!target || !visible(target)){
+          $('status').textContent='対象項目が再描画されたため移動できません。セクションを手動で開いてください。';
+          return;
+        }
+        target.scrollIntoView({behavior:'auto',block:'center',inline:'nearest'});
         emphasizeTarget(target);
         $('status').textContent='「'+r.targetLabel+'」へ移動しました。該当セクションは開いたままです。';
       }catch{
@@ -1008,7 +1048,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FT 不備チェック 補助 v1.6.1｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FT 不備チェック 補助 v1.6.2｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

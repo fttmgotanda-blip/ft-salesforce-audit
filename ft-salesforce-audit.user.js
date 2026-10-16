@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.1
+// @version      1.7.2
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -593,6 +593,16 @@
             '前後確一本化案件の「対象」を確認できないため、OP関連のチェックは保留です。','前後確一本化案件');
         }
       }
+      // 前後確一本化案件「対象」ならFC完了日と担当者の両方が必須。
+      // 「対象外」なら両方空欄。区分が未確認の場合はOP判定側で保留にする。
+      if(unificationChoice==='対象'){
+        required('FC完了日',0,'前後確一本化案件が「対象」のためFC完了日の入力が必要です。');
+        required('FC担当者',0,'前後確一本化案件が「対象」のためFC担当者の入力が必要です。');
+      }else if(unificationChoice==='対象外'){
+        empty('FC完了日',0,'前後確一本化案件が「対象外」の場合はFC完了日を空欄にしてください。');
+        empty('FC担当者',0,'前後確一本化案件が「対象外」の場合はFC担当者を空欄にしてください。');
+      }
+
       if(opCheckEnabled){
         const op=field('プロバイダOP1');
         if(unknown(op))pending('プロバイダOP1［おトクプラン］',192,'表示値を読み取れません。','プロバイダOP1');
@@ -900,13 +910,21 @@
         .opsummary .small{display:block;color:#506a7a;margin-top:2px}
         .reviewed{background:#f3f7f6}.reviewed .review{color:#136d3c}
         .reviewNotice{background:#fff8e8;border:1px solid #f2d29a;color:#78520b;padding:7px 8px;border-radius:5px;font-size:11px;margin-top:8px}
+        .resultBanner{display:none;padding:11px 12px;margin:10px 0;border:1px solid;border-radius:7px}
+        .resultBanner.show{display:block}
+        .resultBanner.ok{background:#eef8f1;border-color:#88c5a0;color:#176337}
+        .resultBanner.review{background:#fffaee;border-color:#dfc57e;color:#77510f}
+        .resultBanner.warning{background:#fff1ef;border-color:#e5aca4;color:#982b23}
+        .resultBanner strong{display:block;font-size:15px;line-height:1.4}
+        .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.1</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.2</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
         <div id="status" role="status">詳細タブを開いて実行してください。閉じた項目セクションはチェック時に一時展開します。</div>
+        <div id="resultBanner" class="resultBanner" role="status" aria-live="polite"></div>
         <div id="counts" class="stats"></div>
         <div id="opSummary" class="opsummary" aria-live="polite">OP名称照合は未実行です。</div>
         <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
@@ -1068,8 +1086,29 @@
       }
     }
 
+    function getAuditOutcome(results,unfinished=0){
+      const bad=results.filter(r=>r.status==='要修正候補').length;
+      const pendingCount=results.filter(r=>r.status==='判定保留').length;
+      if(bad>0)return {kind:'warning',title:'要修正候補あり：'+bad+'件',
+        detail:pendingCount>0?'判定保留 '+pendingCount+'件もあります。各項目を確認してください。':'不備候補を確認してください。最終判断は担当者が行います。'};
+      if(pendingCount>0||unfinished>0||!results.length)return {kind:'review',title:'要修正候補0件・要目視確認',
+        detail:(pendingCount>0?'判定保留 '+pendingCount+'件。':'')+(unfinished>0?'展開できないセクション '+unfinished+'件。':'')+'確認できない項目があるため「不備なし」とは断定できません。'};
+      return {kind:'ok',title:'✓ 不備候補なし',
+        detail:'自動チェック対象ルールでは不備候補を検出しませんでした。最終確認は担当者が行ってください。'};
+    }
+    function showAuditOutcome(){
+      const banner=$('resultBanner');
+      banner.className='resultBanner';banner.replaceChildren();
+      if(!latest)return;
+      const outcome=getAuditOutcome(latest.results,latest.unfinished||0);
+      banner.className='resultBanner show '+outcome.kind;
+      const title=document.createElement('strong');title.textContent=outcome.title;
+      const detail=document.createElement('span');detail.textContent=outcome.detail;
+      banner.append(title,detail);
+    }
     function draw() {
       if(!latest) return;
+      showAuditOutcome();
       $('counts').replaceChildren();
       const os=summarizeOp(latest.results);
       $('opSummary').replaceChildren();
@@ -1085,7 +1124,7 @@
       for(const r of selected){
         const tr=document.createElement('tr'),a=document.createElement('td'),b=document.createElement('td'),c=document.createElement('td');
         if(reviewed.has(reviewKey(r))) tr.classList.add('reviewed');
-        const link=document.createElement('button');link.type='button';link.className='jump';link.textContent=r.label + '（行'+r.row+'）';
+        const link=document.createElement('button');link.type='button';link.className='jump';link.textContent=r.label + (Number.isInteger(r.row)&&r.row>0?'（行'+r.row+'）':'');
         link.addEventListener('click',()=>{void jumpToResult(r);});
         a.appendChild(link);
         const st=document.createElement('div');st.className=colors[r.status]||'pending';st.textContent=r.status;
@@ -1107,6 +1146,7 @@
     }
     function clearResults(message) {
       latest=null;reviewed.clear();
+      showAuditOutcome();
       $('copy').disabled=true;$('copyAll').disabled=true;
       $('counts').replaceChildren();
       $('opSummary').textContent='対象外のため照合は実施していません。';
@@ -1122,6 +1162,7 @@
       }
       const runButton=$('run');
       runButton.disabled=true;
+      $('resultBanner').className='resultBanner';
       $('status').textContent='閉じたセクションを一時展開し、項目を読み取っています…';
       let opened=[];
       try{
@@ -1139,7 +1180,7 @@
           clearResults('タイプ1・タイプ2は現在の業務対象外のため、チェックを実行しません。');
           return;
         }
-        const res=runRules(d.fields);reviewed.clear();latest={fieldCount:d.fields.length,results:res};
+        const res=runRules(d.fields);reviewed.clear();latest={fieldCount:d.fields.length,results:res,unfinished:expansion.unopened};
         const unfinished=expansion.unopened;
         $('status').textContent=`${res.length}件の試作ルールを判定しました。${unfinished?'展開できないセクションが'+unfinished+'件あり、該当項目は目視確認が必要です。':'閉じていたセクションも読み取りました。'} 最終判断は目視でお願いします。再実行で目視済チェックはリセットされます。`;
         $('copy').disabled=false;$('copyAll').disabled=false;$('copyFallback').style.display='none';filter='未確認';draw();
@@ -1153,8 +1194,8 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.7.1｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
-      const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,'行'+r.row,r.status,r.reason].join('\t')).join('\n');
+      const header='FTシステム | Salesforce 不備チェック v1.7.2｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}
       catch{$('backup').focus();$('backup').select();$('status').textContent='自動コピー不可：下のテキストを Ctrl+C でコピーしてください。';}

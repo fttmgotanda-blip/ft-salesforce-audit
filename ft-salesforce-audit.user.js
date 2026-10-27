@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.2
+// @version      1.7.3
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -603,6 +603,22 @@
         empty('FC担当者',0,'前後確一本化案件が「対象外」の場合はFC担当者を空欄にしてください。');
       }
 
+      // 一本化対象外では、初回FC架電希望時間が空欄ならこちらで時間入力が必要。
+      // これはデータ不備ではなく現場の追加作業なので、別の「業務アラート」として示す。
+      if(unificationChoice==='対象外'){
+        const firstCallTime=field('初回FC架電希望時間');
+        if(unknown(firstCallTime)){
+          pending('初回FC架電希望時間［入力要否］',0,
+            '初回FC架電希望時間を読み取れません。一本化対象外の案件のため、時間入力が必要か画面で確認してください。','初回FC架電希望時間');
+        }else if(firstCallTime.state==='空欄候補'){
+          emit('初回FC架電希望時間［入力依頼］',0,'業務アラート',
+            '前後確一本化案件が「対象外」で、初回FC架電希望時間が空欄です。弊社側で時間の入力が必要です（不備判定とは別）。','初回FC架電希望時間');
+        }else{
+          emit('初回FC架電希望時間［入力依頼］',0,'適合候補',
+            '前後確一本化案件が「対象外」ですが、初回FC架電希望時間は入力されています。','初回FC架電希望時間');
+        }
+      }
+
       if(opCheckEnabled){
         const op=field('プロバイダOP1');
         if(unknown(op))pending('プロバイダOP1［おトクプラン］',192,'表示値を読み取れません。','プロバイダOP1');
@@ -726,13 +742,32 @@
               ['電話(N)-着信お知らせメール申込有無',284],['電話(N)-発信者番号通知',285]
             ].forEach(([label,row])=>required(label,row,'電話(N)申込の場合は必須です。'));
             const pick=val('電話(N)-電話番号選択');
+            const appCategory=val('タイプ3-申し込み区分');
+            const type3New=type3 && appCategory!==null && /新規/.test(appCategory) && !/転用|事業者変更/.test(appCategory);
+            if(type3New){
+              const choice=field('電話(N)-電話番号選択');
+              if(unknown(choice)){
+                pending('電話(N)［タイプ3新規の番号選択］',272,
+                  '電話(N)の番号選択を読み取れません。タイプ3新規の場合は「新しい電話番号を希望」のみ選択可能です。','電話(N)-電話番号選択');
+              }else if(choice.state==='値あり'){
+                const selectedNumber=normalize(choice.value).replace(/^[0-9]+[.．、]\s*/,'').trim();
+                const correct=selectedNumber==='新しい電話番号を希望';
+                emit('電話(N)［タイプ3新規の番号選択］',272,correct?'適合候補':'要修正候補',
+                  correct?'タイプ3新規で「新しい電話番号を希望」が選択されています。':
+                    'タイプ3新規では「新しい電話番号を希望」のみ選択可能です。','電話(N)-電話番号選択');
+              }
+              // 空欄の必須チェックは、上の「電話(N)-電話番号選択」が実施済み。
+            }else if(type3 && appCategory===null){
+              pending('電話(N)［タイプ3新規の番号選択］',272,
+                '申し込み区分を読み取れないため、タイプ3新規限定の番号選択条件を判定できません。','タイプ3-申し込み区分');
+            }
             if(pick===null)pending('電話(N)-電話番号引継条件',273,'番号選択を確認できません。','電話(N)-電話番号選択');
             else if(pick.includes('現在')&&pick.includes('継続')){
               [ ['電話(N)-番ポ旧事業者コード',273],['電話(N)-電話番号',274],
                 ['電話(N)-番ポ契約者姓カナ',275],['電話(N)-番ポ契約者名カナ',276],
                 ['電話(N)-番ポ契約者姓漢字',277],['電話(N)-番ポ契約者名漢字',278]
               ].forEach(([label,row])=>required(label,row,'現在の電話番号を引き継ぐため必須です。'));
-            }else if(pick.includes('新番')){
+            }else if(pick.includes('新番')||pick.includes('新しい電話番号を希望')){
               [ ['電話(N)-番ポ契約者姓カナ',275],['電話(N)-番ポ契約者名カナ',276],
                 ['電話(N)-番ポ契約者姓漢字',277],['電話(N)-番ポ契約者名漢字',278]
               ].forEach(([label,row])=>empty(label,row,'新番取得時は記載しません。'));
@@ -799,6 +834,27 @@
         const match=matches[0];
         if(!selected.has(match.name))selected.set(match.name,[]);
         selected.get(match.name).push({label:slot.label});
+      }
+
+      // 新マニュアル：BIGLOBEあんしんパックとトータルネットセキュリティは重複申込不可。
+      // 「BIGLOBEあんしんバックアップ」は別サービスなので、この判定に含めない。
+      // 申込サービスのみ記載される投入備考と、実際の選択済OP2～16を照合する。
+      {
+        const activeTexts=opSlots.filter(slot=>!unknown(slot.data) &&
+          slot.data.state==='値あり'&&!offOption(slot.data.value));
+        const sources=[
+          ...(memoKnown && memoF.state==='値あり'?[{label:'投入備考',text:memoText}]:[]),
+          ...activeTexts.map(slot=>({label:slot.label,text:normalize(slot.data.value)}))
+        ];
+        const key=t=>normalize(t).replace(/[\s\u3000・･\-ー]/g,'').toLowerCase();
+        const pack=sources.filter(src=>key(src.text).includes(key('BIGLOBEあんしんパック')));
+        const security=sources.filter(src=>key(src.text).includes(key('トータルネットセキュリティ')));
+        if(pack.length && security.length){
+          // 異なる欄で検出した場合も、誤って適合扱いせず確認を促す。
+          emit('OP重複申込｜BIGLOBEあんしんパック＋トータルネットセキュリティ',193,'要修正候補',
+            'BIGLOBEあんしんパックとトータルネットセキュリティは重複申込不可です。申込内容を確認してください。',
+            pack.find(x=>x.label!=='投入備考')?.label||security.find(x=>x.label!=='投入備考')?.label||'投入備考');
+        }
       }
       if(!memoKnown){
         pending('投入備考［OP照合］',193,'投入備考を読み取れないため、OPとの双方向照合を実施できません。','投入備考');
@@ -919,7 +975,7 @@
         .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.2</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.3</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -927,15 +983,15 @@
         <div id="resultBanner" class="resultBanner" role="status" aria-live="polite"></div>
         <div id="counts" class="stats"></div>
         <div id="opSummary" class="opsummary" aria-live="polite">OP名称照合は未実行です。</div>
-        <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
+        <div class="buttons" id="filters"><button type="button" data-filter="未確認">未確認（警告＋保留＋業務）</button><button type="button" data-filter="要修正候補">要修正候補</button><button type="button" data-filter="判定保留">判定保留</button><button type="button" data-filter="OP照合">OP名称照合</button><button type="button" data-filter="すべて">全ルール</button></div>
         <div class="tablebox"><table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead><tbody id="items"><tr><td colspan="3">未実行</td></tr></tbody></table></div>
         <div id="copyFallback" style="display:none;margin-top:8px"><div class="note">項目名・判定・理由のみ（顧客入力値なし）。必要なら全選択して Ctrl+C でコピーできます。</div><textarea id="backup" readonly></textarea></div>
         </div></div>`;
     document.body.appendChild(host);
     const $=id=>shadow.getElementById(id);
     let latest=null, filter='未確認', reviewed=new Set(), navigating=false;
-    const colors={'要修正候補':'bad','適合候補':'good','判定保留':'pending','対象外':'skip'};
-    const needsHumanReview = (r) => r.status==='要修正候補'||r.status==='判定保留';
+    const colors={'要修正候補':'bad','適合候補':'good','判定保留':'pending','対象外':'skip','業務アラート':'pending'};
+    const needsHumanReview = (r) => r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート';
     const reviewKey = (r) => String(r.row)+'|'+r.label+'|'+r.status+'|'+r.reason;
 
     function summarizeOp(results){
@@ -1089,10 +1145,11 @@
     function getAuditOutcome(results,unfinished=0){
       const bad=results.filter(r=>r.status==='要修正候補').length;
       const pendingCount=results.filter(r=>r.status==='判定保留').length;
+      const actionCount=results.filter(r=>r.status==='業務アラート').length;
       if(bad>0)return {kind:'warning',title:'要修正候補あり：'+bad+'件',
         detail:pendingCount>0?'判定保留 '+pendingCount+'件もあります。各項目を確認してください。':'不備候補を確認してください。最終判断は担当者が行います。'};
-      if(pendingCount>0||unfinished>0||!results.length)return {kind:'review',title:'要修正候補0件・要目視確認',
-        detail:(pendingCount>0?'判定保留 '+pendingCount+'件。':'')+(unfinished>0?'展開できないセクション '+unfinished+'件。':'')+'確認できない項目があるため「不備なし」とは断定できません。'};
+      if(pendingCount>0||unfinished>0||!results.length||actionCount>0)return {kind:'review',title:actionCount>0?'不備候補0件・要業務対応：'+actionCount+'件':'要修正候補0件・要目視確認',
+        detail:(pendingCount>0?'判定保留 '+pendingCount+'件。':'')+(unfinished>0?'展開できないセクション '+unfinished+'件。':'')+(actionCount>0?'入力が必要な業務アラート '+actionCount+'件。':'')+'確認が必要な項目があるため、作業完了とは断定できません。'};
       return {kind:'ok',title:'✓ 不備候補なし',
         detail:'自動チェック対象ルールでは不備候補を検出しませんでした。最終確認は担当者が行ってください。'};
     }
@@ -1117,10 +1174,10 @@
       $('opSummary').append(strong,small);
       const flags=latest.results.filter(needsHumanReview);
       const reviewedCount=flags.filter(r=>reviewed.has(reviewKey(r))).length;
-      const set=[['検出ラベル',latest.fieldCount],['試作ルール',latest.results.length],['要修正候補',latest.results.filter(r=>r.status==='要修正候補').length],['判定保留',latest.results.filter(r=>r.status==='判定保留').length],['目視済（警告）',reviewedCount+'/'+flags.length]];
+      const set=[['検出ラベル',latest.fieldCount],['試作ルール',latest.results.length],['要修正候補',latest.results.filter(r=>r.status==='要修正候補').length],['判定保留',latest.results.filter(r=>r.status==='判定保留').length],['業務アラート',latest.results.filter(r=>r.status==='業務アラート').length],['目視済（警告）',reviewedCount+'/'+flags.length]];
       for(const [name,num] of set){const sp=document.createElement('span');sp.className='stat';sp.textContent=name+' ';const b=document.createElement('b');b.textContent=num;sp.appendChild(b);$('counts').appendChild(sp);}
       $('items').replaceChildren();
-      const selected=latest.results.filter(r=>filter==='すべて'||(filter==='未確認' ? needsHumanReview(r)&&!reviewed.has(reviewKey(r)) : filter==='OP照合' ? r.label.startsWith('OP照合｜') || r.label.startsWith('未識別OP選択｜') || r.label==='読み取り不可OP欄' || r.label==='投入備考［OP照合］' || r.label==='OPチェック［前後確一本化案件］' : r.status===filter));
+      const selected=latest.results.filter(r=>filter==='すべて'||(filter==='未確認' ? needsHumanReview(r)&&!reviewed.has(reviewKey(r)) : filter==='OP照合' ? r.label.startsWith('OP照合｜') || r.label.startsWith('OP重複申込｜') || r.label.startsWith('未識別OP選択｜') || r.label==='読み取り不可OP欄' || r.label==='投入備考［OP照合］' || r.label==='OPチェック［前後確一本化案件］' : r.status===filter));
       for(const r of selected){
         const tr=document.createElement('tr'),a=document.createElement('td'),b=document.createElement('td'),c=document.createElement('td');
         if(reviewed.has(reviewKey(r))) tr.classList.add('reviewed');
@@ -1193,8 +1250,8 @@
     $('filters').addEventListener('click',e=>{const f=e.target?.dataset?.filter;if(f){filter=f;draw();}});
     async function copyResults(all){
       if(!latest)return;
-      const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留');
-      const header='FTシステム | Salesforce 不備チェック v1.7.2｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート');
+      const header='FTシステム | Salesforce 不備チェック v1.7.3｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

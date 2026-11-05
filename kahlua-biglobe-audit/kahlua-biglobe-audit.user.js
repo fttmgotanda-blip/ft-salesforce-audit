@@ -1,9 +1,13 @@
 // ==UserScript==
 // @name         BIGLOBE光｜Kahlua DB自動不備チェック Part2（個人・法人）
 // @namespace    https://first-team.local/audit
-// @version      0.1.2
+// @version      0.1.3
 // @description  読み取り専用。個人・法人、複数タブ、条件付き必須・相互照合を支援。個人情報は外部送信・コピーしません。
 // @match        https://kahlua.allconnect-wagby.jp/Kahlua/*
+// @match        https://kahlua25.allconnect-wagby.jp/Kahlua25/*
+// @match        https://kahluafc.allconnect-wagby.jp/KahluaFC/*
+// @match        https://kahluaeyes.allconnect-wagby.jp/KahluaEYES/*
+// @match        https://kahluals.allconnect-wagby.jp/KahluaLS/*
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/kahlua-biglobe-audit/kahlua-biglobe-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/kahlua-biglobe-audit/kahlua-biglobe-audit.user.js
 // @run-at       document-idle
@@ -12,11 +16,14 @@
 
 (() => {
   'use strict';
-  if (!/showTAPP/i.test(location.pathname)) return;
+  // 5環境共通。ログイン画面は案内のみ、詳細画面のみ判定を許可する。
+  const detailPage = /\/showTAPP[A-Za-z0-9_]*\.do$/i.test(location.pathname);
+  const loginPage = /\/logonPage\.do$/i.test(location.pathname);
+  if (!detailPage && !loginPage) return;
   if (document.getElementById('ft-kahlua-audit-root')) return;
 
   const TITLE = 'BIGLOBE光｜DB不備チェック Part2';
-  const VERSION = '0.1.2';
+  const VERSION = '0.1.3';
   const source = '【BIGLOBE光】DBマニュアル_261029.xlsx／【個人】DB不備チェック・【法人】DB不備チェック';
   const ST = {BAD:'要修正候補', OK:'適合候補', HOLD:'判定保留', SKIP:'対象外'};
   const clean = s => String(s ?? '').replace(/\u00a0/g,' ').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
@@ -127,6 +134,14 @@
     #ft-kahlua-audit-root .ft-reviewed-label{display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;color:#405668;cursor:pointer}
     #ft-kahlua-audit-root .ft-reviewed-label input{accent-color:#147d64;width:14px;height:14px;cursor:pointer;margin:0}
     #ft-kahlua-audit-root .ft-footer{padding-top:8px;color:#708198;font-size:10px}
+    #ft-kahlua-audit-root.ft-login .ft-actions,
+    #ft-kahlua-audit-root.ft-login .ft-banner,
+    #ft-kahlua-audit-root.ft-login .ft-stats,
+    #ft-kahlua-audit-root.ft-login .ft-kind,
+    #ft-kahlua-audit-root.ft-login .ft-scope,
+    #ft-kahlua-audit-root.ft-login .ft-tabs,
+    #ft-kahlua-audit-root.ft-login .ft-results,
+    #ft-kahlua-audit-root.ft-login .ft-footer{display:none}
     #ft-kahlua-audit-root.ft-collapsed .ft-inner{display:none}
     #ft-kahlua-audit-root.ft-collapsed .ft-title{border-radius:9px}
     .ft-audit-focus{outline:4px solid #efb14d!important;outline-offset:3px!important;scroll-margin-top:120px}
@@ -784,8 +799,8 @@
     controls.append(copy,close);content.append(controls);popup.append(content);document.body.append(popup);
     popup.addEventListener('click',e=>{if(e.target===popup)popup.remove()});
   }
-  $('#ft-run').onclick=()=>{try{doAudit();say(items.length+'件の試作ルールを判定しました。最終判断は目視でお願いします。再実行で「目視済」をリセットします。')}catch(e){console.error('[FT Kahlua Audit] error:',e?.message);say('判定中にエラー。画面レイアウト・項目名を確認してください。')}};
-  $('#ft-scan').onclick=()=>sweep().catch(e=>{console.error('[FT Kahlua Audit] error:',e?.message);busy=false;$('#ft-scan').disabled=false;say('タブ巡回中にエラーが発生しました。')});
+  $('#ft-run').onclick=()=>{if(!detailPage){say('ログイン後に申込情報の詳細表示画面を開いてください。');return;}try{doAudit();say(items.length+'件の試作ルールを判定しました。最終判断は目視でお願いします。再実行で「目視済」をリセットします。')}catch(e){console.error('[FT Kahlua Audit] error:',e?.message);say('判定中にエラー。画面レイアウト・項目名を確認してください。')}};
+  $('#ft-scan').onclick=()=>{if(!detailPage){say('ログイン後に申込情報の詳細表示画面を開いてください。');return;}return sweep().catch(e=>{console.error('[FT Kahlua Audit] error:',e?.message);busy=false;$('#ft-scan').disabled=false;say('タブ巡回中にエラーが発生しました。')});};
   $('#ft-copy').onclick=()=>copyReport(false);
   $('#ft-copy-all').onclick=()=>copyReport(true);
   $('#ft-clear').onclick=()=>{items=[];reviewed.clear();filter='REVIEW';render();say('結果を消去しました。')};
@@ -807,7 +822,12 @@
     Object.assign(root.style,{left:left+'px',top:top+'px',right:'auto'});
   });
   for(const ev of ['pointerup','pointercancel'])drag.addEventListener(ev,()=>start=null);
-  mode=detectMode();$('#ft-kind-label').textContent=mode==='personal'?'個人':'法人';
-  render();
-  say('参照マニュアル：2026/10/29版。詳細画面のタブを読み取って確認してください。');
+  if(loginPage){
+    root.classList.add('ft-login');
+    say('ログイン画面です。ログイン後、申込情報（個人・法人）の詳細表示画面で不備チェックを実行できます。');
+  } else {
+    mode=detectMode();$('#ft-kind-label').textContent=mode==='personal'?'個人':'法人';
+    render();
+    say('参照マニュアル：2026/10/29版。詳細画面のタブを読み取って確認してください。');
+  }
 })();

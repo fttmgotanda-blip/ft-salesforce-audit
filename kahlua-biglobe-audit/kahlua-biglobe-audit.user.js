@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BIGLOBE光｜Kahlua DB自動不備チェック Part2（個人・法人）
 // @namespace    https://first-team.local/audit
-// @version      0.1.0
+// @version      0.1.1
 // @description  読み取り専用。個人・法人、複数タブ、条件付き必須・相互照合を支援。個人情報は外部送信・コピーしません。
 // @match        https://kahlua.allconnect-wagby.jp/Kahlua/*
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/kahlua-biglobe-audit/kahlua-biglobe-audit.user.js
@@ -16,7 +16,7 @@
   if (document.getElementById('ft-kahlua-audit-root')) return;
 
   const TITLE = 'BIGLOBE光｜DB不備チェック Part2';
-  const VERSION = '0.1.0';
+  const VERSION = '0.1.1';
   const source = '【BIGLOBE光】DBマニュアル_261029.xlsx／【個人】DB不備チェック・【法人】DB不備チェック';
   const ST = {BAD:'要修正候補', OK:'適合候補', HOLD:'判定保留', SKIP:'対象外'};
   const clean = s => String(s ?? '').replace(/\u00a0/g,' ').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
@@ -494,7 +494,10 @@
   }
   function routersAndCashback(x,isCorp){
     if(!isCorp){
-      const tab='Wi-Fiルータ情報', r1=val('BIG提供(レンタル) 無線LANルータ(1ギガ以下)'),r10=val('NTT提供(レンタル) 無線LANルータ(10ギガ)');
+      const tab='Wi-Fiルータ情報', r1Raw=val('BIG提供(レンタル) 無線LANルータ(1ギガ以下)'),r10=val('NTT提供(レンタル) 無線LANルータ(10ギガ)');
+      // Wagbyの数量欄は未入力でも単位「台」だけを表示する。単位のみは空欄として扱う。
+      // 0台・1台など数字のある値はそのまま判定対象に残す。
+      const r1=/^台$/.test(norm(r1Raw)) ? '' : r1Raw;
       if(x.speed===1 && !filled(r1))when('BIG提供(レンタル) 無線LANルータ(1ギガ以下)',tab,true,'1ギガでは無の場合も「0」選択が必要です。');
       if(x.speed===1 && filled(r10))compare('10Gレンタル（1Gでは空欄）',tab,r10,false,'1ギガで10ギガ用レンタルの選択があります。','NTT提供(レンタル) 無線LANルータ(10ギガ)');
       if(x.speed===10 && filled(r1))compare('1Gレンタル（10Gでは空欄）',tab,r1,false,'10ギガでは1ギガ用レンタル欄は空欄です。','BIG提供(レンタル) 無線LANルータ(1ギガ以下)');

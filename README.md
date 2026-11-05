@@ -32,3 +32,12 @@ Salesforce上で表示されたauひかりプラスの申込情報を、社内�
 ## 配布ファイル
 
 - [ft-salesforce-audit.user.js](https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js)
+
+## Kahlua｜BIGLOBE光 DB自動不備チェック Part2
+
+個人・法人のDB詳細画面向けの別スクリプトです。複数タブを横断し、不備候補・判定保留を表示します。
+
+- [Part2 の導入手順と仕様](kahlua-biglobe-audit/README.md)
+- [Part2 を Tampermonkey にインストール](https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/kahlua-biglobe-audit/kahlua-biglobe-audit.user.js)
+
+試作版です。最終的な不備判断は担当者が行ってください。

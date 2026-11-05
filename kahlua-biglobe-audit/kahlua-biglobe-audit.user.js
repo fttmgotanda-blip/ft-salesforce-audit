@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BIGLOBE光｜Kahlua DB自動不備チェック Part2（個人・法人）
 // @namespace    https://first-team.local/audit
-// @version      0.1.1
+// @version      0.1.2
 // @description  読み取り専用。個人・法人、複数タブ、条件付き必須・相互照合を支援。個人情報は外部送信・コピーしません。
 // @match        https://kahlua.allconnect-wagby.jp/Kahlua/*
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/kahlua-biglobe-audit/kahlua-biglobe-audit.user.js
@@ -16,7 +16,7 @@
   if (document.getElementById('ft-kahlua-audit-root')) return;
 
   const TITLE = 'BIGLOBE光｜DB不備チェック Part2';
-  const VERSION = '0.1.1';
+  const VERSION = '0.1.2';
   const source = '【BIGLOBE光】DBマニュアル_261029.xlsx／【個人】DB不備チェック・【法人】DB不備チェック';
   const ST = {BAD:'要修正候補', OK:'適合候補', HOLD:'判定保留', SKIP:'対象外'};
   const clean = s => String(s ?? '').replace(/\u00a0/g,' ').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
@@ -34,57 +34,101 @@
   const roman = /[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹ]/;
   const extChar = /[𠮷髙﨑廣栁㈱㈲①②③④⑤⑥⑦⑧⑨⑩⑪⑫❶❷❸❹]/u;
   const sleep = ms => new Promise(res=>setTimeout(res,ms));
-  let mode = 'personal', records=[], items=[], latestAt='', filter='BAD', collapsed=false, busy=false;
+  let mode = 'personal', records=[], items=[], latestAt='', filter='REVIEW', collapsed=false, busy=false, reviewed=new Set();
 
   const root = document.createElement('section');
   root.id = 'ft-kahlua-audit-root';
   root.innerHTML = `
-    <div class="ft-title" id="ft-drag"><span>🔎 ${TITLE} <small>v${VERSION}</small></span><span id="ft-collapse" title="折りたたむ">−</span></div>
+    <div class="ft-title" id="ft-drag" title="ドラッグで移動できます">
+      <span>BIGLOBE光｜DB不備チェック Part2 <small id="ft-version"></small></span>
+      <span class="ft-head-actions"><button type="button" id="ft-collapse" title="折りたたみ">−</button><button type="button" id="ft-close" title="閉じる">×</button></span>
+    </div>
     <div class="ft-inner">
+      <div class="ft-notice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
+      <div class="ft-actions">
+        <button type="button" id="ft-run">不備候補を確認</button>
+        <button type="button" id="ft-copy" disabled>要確認だけコピー</button>
+        <button type="button" id="ft-copy-all" disabled>全結果コピー</button>
+      </div>
+      <div class="ft-message" id="ft-message" role="status">詳細表示画面を開いて実行してください。</div>
+      <div class="ft-banner" id="ft-summary" role="status" aria-live="polite"></div>
+      <div class="ft-stats" id="ft-stats"></div>
       <div class="ft-kind">対象：<b id="ft-kind-label">判定中</b><span id="ft-coverage"></span></div>
-      <div class="ft-actions"><button id="ft-run">不備チェック実行</button><button id="ft-scan">タブ巡回・再チェック</button></div>
-      <div class="ft-sum" id="ft-summary">未実行</div>
-      <div class="ft-tabs"><button data-filter="BAD">要修正候補</button><button data-filter="HOLD">判定保留</button><button data-filter="ALL">すべて</button></div>
-      <div class="ft-results" id="ft-results"><div class="ft-muted">「不備チェック実行」を押してください。</div></div>
-      <div class="ft-footer"><button id="ft-copy">結果を表示・コピー</button><button id="ft-clear">結果消去</button><small>画面読取のみ・外部送信なし</small></div>
-      <div class="ft-message" id="ft-message"></div>
+      <div class="ft-scope" id="ft-scope">OP・Wi-Fi関連の照合は未実行です。</div>
+      <div class="ft-actions ft-tools">
+        <button type="button" id="ft-scan">タブ巡回・再チェック</button>
+        <button type="button" id="ft-clear">結果消去</button>
+      </div>
+      <div class="ft-tabs" id="ft-filters">
+        <button type="button" data-filter="REVIEW">未確認（警告＋保留）</button>
+        <button type="button" data-filter="BAD">要修正候補</button>
+        <button type="button" data-filter="HOLD">判定保留</button>
+        <button type="button" data-filter="OP">OP・Wi-Fi照合</button>
+        <button type="button" data-filter="ALL">全ルール</button>
+      </div>
+      <div class="ft-results">
+        <table><thead><tr><th>対象（クリックで移動）</th><th>判定・理由</th><th>目視</th></tr></thead>
+          <tbody id="ft-result-body"><tr><td colspan="3">未実行</td></tr></tbody>
+        </table>
+      </div>
+      <div class="ft-footer"><small>画面読取のみ・外部送信なし／最終判断は目視で</small></div>
     </div>`;
+  root.querySelector('#ft-version').textContent='v'+VERSION;
   const style=document.createElement('style');
   style.textContent=`
-    #ft-kahlua-audit-root{position:fixed;right:16px;top:95px;width:405px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);z-index:2147483646;font-family:-apple-system,BlinkMacSystemFont,'Yu Gothic',Meiryo,sans-serif;font-size:12px;line-height:1.45;color:#233044;background:#fff;border:1px solid #b8c7dc;border-radius:11px;box-shadow:0 8px 30px #1b2c4e38;overflow:hidden}
+    #ft-kahlua-audit-root{position:fixed;right:14px;bottom:14px;width:400px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);z-index:2147483646;font:12px/1.5 -apple-system,BlinkMacSystemFont,Meiryo,sans-serif;color:#20384b;background:#fff;border:1px solid #ccd9e4;border-radius:10px;box-shadow:0 5px 23px #182f492f;display:flex;flex-direction:column;overflow:hidden}
     #ft-kahlua-audit-root *{box-sizing:border-box}
-    #ft-kahlua-audit-root .ft-title{display:flex;align-items:center;justify-content:space-between;padding:11px 12px;background:#173355;color:white;font-size:13px;font-weight:700;cursor:move;user-select:none}
-    #ft-kahlua-audit-root .ft-title small{font-size:10px;opacity:.72;font-weight:400}
-    #ft-kahlua-audit-root #ft-collapse{font-size:20px;cursor:pointer;padding:0 5px}
-    #ft-kahlua-audit-root .ft-inner{padding:10px;max-height:calc(100vh - 74px);overflow:auto}
-    #ft-kahlua-audit-root .ft-kind{margin-bottom:9px;color:#43566f}
-    #ft-kahlua-audit-root #ft-coverage{font-size:10px;float:right;color:#677d95}
-    #ft-kahlua-audit-root .ft-actions{display:flex;gap:6px}
-    #ft-kahlua-audit-root button{cursor:pointer;border:1px solid #c7d4e4;border-radius:6px;background:#f6f9fd;color:#1b3b60;padding:7px;font:inherit}
-    #ft-kahlua-audit-root button:hover{background:#e8f1fc}
-    #ft-kahlua-audit-root #ft-run{background:#165da6;border-color:#165da6;color:white;font-weight:700;flex:1}
-    #ft-kahlua-audit-root #ft-scan{flex:1}
-    #ft-kahlua-audit-root .ft-sum{margin:9px 0 6px;padding:9px;background:#f6f8fb;border-radius:7px;font-weight:700}
-    #ft-kahlua-audit-root .ft-tabs{display:flex;gap:5px;margin-bottom:8px}
-    #ft-kahlua-audit-root .ft-tabs button{flex:1;padding:5px 3px;font-size:11px}
-    #ft-kahlua-audit-root .ft-tabs button.active{background:#244b78;color:#fff}
-    #ft-kahlua-audit-root .ft-results{max-height:310px;min-height:45px;overflow:auto;border:1px solid #e4e9f1;border-radius:7px}
-    #ft-kahlua-audit-root .ft-row{border-bottom:1px solid #ecf0f5;padding:8px;cursor:pointer}
-    #ft-kahlua-audit-root .ft-row:last-child{border-bottom:0}
-    #ft-kahlua-audit-root .ft-row:hover{background:#f6faff}
-    #ft-kahlua-audit-root .ft-row .ft-line{display:flex;align-items:baseline;gap:6px;justify-content:space-between}
-    #ft-kahlua-audit-root .ft-row b{color:#152b49}
-    #ft-kahlua-audit-root .ft-row .ft-desc{font-size:11px;color:#627286;margin-top:3px;white-space:pre-wrap;overflow-wrap:anywhere}
-    #ft-kahlua-audit-root .ft-row .ft-loc{font-size:10px;color:#789}
-    #ft-kahlua-audit-root .ft-badge{display:inline-block;white-space:nowrap;border-radius:6px;padding:2px 5px;font-size:10px}
-    #ft-kahlua-audit-root .ft-bad{color:#9d2d29;background:#ffedec}
-    #ft-kahlua-audit-root .ft-hold{color:#815407;background:#fff4df}
-    #ft-kahlua-audit-root .ft-ok{color:#26744a;background:#eaf8f0}
-    #ft-kahlua-audit-root .ft-skip{color:#61738c;background:#e9edf2}
-    #ft-kahlua-audit-root .ft-footer{display:flex;gap:5px;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap}
-    #ft-kahlua-audit-root .ft-footer button{font-size:11px;padding:5px}
-    #ft-kahlua-audit-root .ft-footer small,.ft-muted,#ft-kahlua-audit-root .ft-message{font-size:10px;color:#708198}
-    #ft-kahlua-audit-root .ft-message{margin-top:5px}
+    #ft-kahlua-audit-root .ft-title{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:0 0 auto;min-height:40px;padding:7px 9px;color:#fff;background:#183955;font-weight:700;cursor:move;touch-action:none;user-select:none}
+    #ft-kahlua-audit-root .ft-title>span:first-child{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #ft-kahlua-audit-root .ft-title small{font-size:10px;font-weight:700}
+    #ft-kahlua-audit-root .ft-head-actions{display:flex;gap:2px;flex:0 0 auto}
+    #ft-kahlua-audit-root .ft-head-actions button{border:0;background:transparent;color:#fff;font-size:18px;font-weight:700;min-width:27px;min-height:26px;padding:1px 4px}
+    #ft-kahlua-audit-root .ft-inner{padding:10px;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+    #ft-kahlua-audit-root button{font:inherit;cursor:pointer;padding:7px 8px;border:1px solid #b6c9d8;border-radius:5px;background:#f8fbfd;color:#20425e}
+    #ft-kahlua-audit-root button:disabled{opacity:.55;cursor:not-allowed}
+    #ft-kahlua-audit-root button:focus-visible{outline:2px solid #136c9e;outline-offset:2px}
+    #ft-kahlua-audit-root button:hover:not(:disabled){filter:brightness(.96)}
+    #ft-kahlua-audit-root .ft-notice{padding:7px 8px;margin:0 0 9px;border:1px solid #f2d29a;background:#fff8e8;color:#78520b;border-radius:5px;font-size:11px}
+    #ft-kahlua-audit-root .ft-actions{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+    #ft-kahlua-audit-root #ft-run{background:#136c9e;border-color:#136c9e;color:white;font-weight:700}
+    #ft-kahlua-audit-root .ft-tools{margin-top:8px;margin-bottom:9px}
+    #ft-kahlua-audit-root .ft-tools button{font-size:11px}
+    #ft-kahlua-audit-root .ft-message{color:#536a7b;font-size:11px;margin:5px 0;white-space:pre-wrap}
+    #ft-kahlua-audit-root .ft-banner{display:none;margin:9px 0 8px;padding:10px 11px;border:1px solid;border-radius:7px}
+    #ft-kahlua-audit-root .ft-banner.show{display:block}
+    #ft-kahlua-audit-root .ft-banner strong{display:block;font-size:14px;line-height:1.45}
+    #ft-kahlua-audit-root .ft-banner span{display:block;font-size:11px;margin-top:4px}
+    #ft-kahlua-audit-root .ft-banner.warning{background:#fff1ef;border-color:#e5aca4;color:#982b23}
+    #ft-kahlua-audit-root .ft-banner.review{background:#fffaee;border-color:#dfc57e;color:#77510f}
+    #ft-kahlua-audit-root .ft-banner.ok{background:#eef8f1;border-color:#88c5a0;color:#176337}
+    #ft-kahlua-audit-root .ft-stats{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0}
+    #ft-kahlua-audit-root .ft-stat{background:#edf3f7;padding:4px 6px;border-radius:5px;font-size:11px}
+    #ft-kahlua-audit-root .ft-stat b{font-size:14px}
+    #ft-kahlua-audit-root .ft-kind{font-size:11px;color:#536a7b;margin:6px 0}
+    #ft-kahlua-audit-root #ft-coverage{float:right;font-size:10px;color:#677d95}
+    #ft-kahlua-audit-root .ft-scope{padding:8px;margin:8px 0;border:1px solid #bad4e7;border-radius:6px;background:#f4f9fc;font-size:11px;white-space:pre-wrap}
+    #ft-kahlua-audit-root .ft-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 8px}
+    #ft-kahlua-audit-root .ft-tabs button{padding:5px 7px;font-size:11px}
+    #ft-kahlua-audit-root .ft-tabs button.active{background:#183955;color:#fff;border-color:#183955}
+    #ft-kahlua-audit-root .ft-results{max-height:min(350px,40vh);overflow:auto;border:1px solid #dce5eb;border-radius:5px}
+    #ft-kahlua-audit-root table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+    #ft-kahlua-audit-root th,#ft-kahlua-audit-root td{padding:7px 5px;text-align:left;vertical-align:top;border-bottom:1px solid #e3e9ee;overflow-wrap:anywhere}
+    #ft-kahlua-audit-root th{background:#edf3f8;position:sticky;top:0;z-index:1}
+    #ft-kahlua-audit-root th:first-child{width:34%}
+    #ft-kahlua-audit-root th:nth-child(2){width:45%}
+    #ft-kahlua-audit-root th:last-child{width:21%}
+    #ft-kahlua-audit-root .ft-jump{display:block;color:#17648a;text-decoration:underline;border:0;background:transparent;text-align:left;padding:0;line-height:1.45;font-size:11px}
+    #ft-kahlua-audit-root .ft-reason{white-space:pre-wrap;margin-top:3px;color:#42576b}
+    #ft-kahlua-audit-root .ft-bad{color:#b42318;font-weight:700}
+    #ft-kahlua-audit-root .ft-hold{color:#9d670f;font-weight:700}
+    #ft-kahlua-audit-root .ft-ok{color:#136d3c;font-weight:700}
+    #ft-kahlua-audit-root .ft-skip{color:#667}
+    #ft-kahlua-audit-root .ft-reviewed{background:#f3f7f6}
+    #ft-kahlua-audit-root .ft-reviewed-label{display:flex;align-items:center;gap:3px;font-size:10px;white-space:nowrap;color:#405668;cursor:pointer}
+    #ft-kahlua-audit-root .ft-reviewed-label input{accent-color:#147d64;width:14px;height:14px;cursor:pointer;margin:0}
+    #ft-kahlua-audit-root .ft-footer{padding-top:8px;color:#708198;font-size:10px}
+    #ft-kahlua-audit-root.ft-collapsed .ft-inner{display:none}
+    #ft-kahlua-audit-root.ft-collapsed .ft-title{border-radius:9px}
     .ft-audit-focus{outline:4px solid #efb14d!important;outline-offset:3px!important;scroll-margin-top:120px}
   `;
   document.head.appendChild(style);
@@ -565,7 +609,7 @@
     for(const [label,tab,reason,ref] of [...common,...custom])hold(label,tab,reason,ref);
   }
   function doAudit(){
-    items=[];records=snap();mode=detectMode();
+    items=[];reviewed.clear();records=snap();mode=detectMode();
     $('#ft-kind-label').textContent=mode==='personal'?'個人':'法人';
     flowCheck(mode==='corporate');
     const x=commonLineCheck(mode==='corporate');
@@ -653,44 +697,106 @@
     setTimeout(()=>target.classList.remove('ft-audit-focus'),2300);
     say(`移動先：${item.tab} ＞ ${item.ref} （実際のタブが閉じている場合は開いて確認）`);
   }
+
+  const isOptionItem = r => /OP|オプション|ルーター|Wi-Fi|無線LAN|BIGLOBE光サービス情報|N\+サービス/i.test(r.tab+' '+r.label);
+  const isReviewItem = r => r.status===ST.BAD || r.status===ST.HOLD;
   function render(){
-    const count=s=>items.filter(x=>x.status===s).length;
-    $('#ft-summary').textContent=`要修正候補 ${count(ST.BAD)}件 ｜ 判定保留 ${count(ST.HOLD)}件 ｜ 適合候補 ${count(ST.OK)}件 ｜ 対象外 ${count(ST.SKIP)}件`;
+    const count=status=>items.filter(x=>x.status===status).length;
+    const bad=count(ST.BAD),holdCount=count(ST.HOLD);
+    const remaining=items.map((r,i)=>({r,i})).filter(({r,i})=>isReviewItem(r)&&!reviewed.has(i)).length;
+    const checked=items.map((r,i)=>({r,i})).filter(({r,i})=>isReviewItem(r)&&reviewed.has(i)).length;
+    const banner=$('#ft-summary');banner.replaceChildren();
+    banner.className='ft-banner'+(items.length?' show '+(bad?'warning':holdCount?'review':'ok'):'');
+    if(items.length){
+      const title=document.createElement('strong');
+      title.textContent=bad?'要修正候補あり：'+bad+'件':holdCount?'要修正候補0件・要目視確認':'✓ 自動チェックで不備候補なし';
+      const detail=document.createElement('span');
+      detail.textContent=bad?'判定保留 '+holdCount+'件もあります。各項目を確認してください。':holdCount?'判定保留 '+holdCount+'件。確認が必要なため完了とは断定できません。':'判定条件内の結果です。最終確認は担当者が行ってください。';
+      banner.append(title,detail);
+    }
+    const stats=$('#ft-stats');stats.replaceChildren();
+    if(items.length){
+      for(const [name,value] of [
+        ['検出ラベル',records.length],['試作ルール',items.length],
+        ['要修正候補',bad],['判定保留',holdCount],
+        ['目視済（要確認）',checked+'/'+(bad+holdCount)]
+      ]){
+        const tag=document.createElement('span');tag.className='ft-stat';
+        tag.append(document.createTextNode(name+' '));
+        const num=document.createElement('b');num.textContent=value;tag.append(num);stats.append(tag);
+      }
+    }
+    const optionItems=items.filter(isOptionItem);
+    const optionWarn=optionItems.filter(isReviewItem).length;
+    $('#ft-scope').textContent=items.length
+      ? 'OP・Wi-Fi関連：確認対象 '+optionItems.length+'件／要確認 '+optionWarn+'件。\nオプションの契約意向や手動照合が必要な条件は、必ずマニュアルと照合してください。'
+      : 'OP・Wi-Fi関連の照合は未実行です。';
+    $('#ft-copy').disabled=!items.length;
+    $('#ft-copy-all').disabled=!items.length;
     root.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
-    const visible=items.map((x,i)=>({...x,index:i})).filter(x=>filter==='ALL'||(filter==='BAD'?x.status===ST.BAD:x.status===ST.HOLD));
-    const wrap=$('#ft-results');wrap.replaceChildren();
-    if(!visible.length){wrap.innerHTML='<div class="ft-muted" style="padding:12px">該当項目はありません。</div>';return;}
-    const classes={[ST.BAD]:'ft-bad',[ST.OK]:'ft-ok',[ST.HOLD]:'ft-hold',[ST.SKIP]:'ft-skip'};
-    for(const entry of visible){
-      const row=document.createElement('div');row.className='ft-row';
-      row.innerHTML=`<div class="ft-line"><b>${esc(entry.label)}</b><span class="ft-badge ${classes[entry.status]}">${esc(entry.status)}</span></div><div class="ft-loc">${esc(entry.tab)} ／ クリックで項目へ移動</div><div class="ft-desc">${esc(entry.reason)}</div>`;
-      row.addEventListener('click',()=>navigate(entry));wrap.appendChild(row);
+    const chosen=items.map((r,i)=>({r,i})).filter(({r,i})=>
+      filter==='ALL'||(filter==='REVIEW'?isReviewItem(r)&&!reviewed.has(i):
+      filter==='BAD'?r.status===ST.BAD:filter==='HOLD'?r.status===ST.HOLD:isOptionItem(r)));
+    const tbody=$('#ft-result-body');tbody.replaceChildren();
+    if(!chosen.length){
+      const tr=document.createElement('tr');const td=document.createElement('td');td.colSpan=3;
+      td.textContent=!items.length?'未実行':filter==='REVIEW'?'未確認の要修正候補・判定保留はありません。最終確認は担当者が行ってください。':'この条件に該当する項目はありません。';
+      tr.append(td);tbody.append(tr);return;
+    }
+    const classes={[ST.BAD]:'ft-bad',[ST.HOLD]:'ft-hold',[ST.OK]:'ft-ok',[ST.SKIP]:'ft-skip'};
+    for(const {r,i} of chosen){
+      const tr=document.createElement('tr');if(reviewed.has(i))tr.className='ft-reviewed';
+      const first=document.createElement('td'),second=document.createElement('td'),third=document.createElement('td');
+      const jump=document.createElement('button');jump.type='button';jump.className='ft-jump';
+      jump.textContent=r.label;jump.title=r.tab+'／クリックで該当項目へ移動';
+      jump.onclick=()=>{void navigate(r);};
+      first.append(jump);
+      const status=document.createElement('div');status.className=classes[r.status]||'ft-hold';status.textContent=r.status;
+      const reason=document.createElement('div');reason.className='ft-reason';reason.textContent=r.reason;
+      const tab=document.createElement('div');tab.style.cssText='font-size:10px;color:#718395;margin-top:4px';tab.textContent=r.tab;
+      second.append(status,reason,tab);
+      if(isReviewItem(r)){
+        const label=document.createElement('label');label.className='ft-reviewed-label';
+        const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=reviewed.has(i);
+        const word=document.createElement('span');word.textContent='確認済';
+        checkbox.onchange=()=>{if(checkbox.checked)reviewed.add(i);else reviewed.delete(i);render();};
+        label.append(checkbox,word);third.append(label);
+      }else third.textContent='—';
+      tr.append(first,second,third);tbody.append(tr);
     }
   }
-  function copyReport(){
+  function copyReport(all=false){
     if(!items.length){say('先に不備チェックを実行してください。');return;}
-    const txt=[TITLE+' v'+VERSION,`対象：${mode==='personal'?'個人':'法人'}`,`確認日時：${latestAt}`,`参照：${source}`,'',...items.filter(x=>x.status===ST.BAD||x.status===ST.HOLD).map(x=>`[${x.status}] ${x.tab}／${x.label}：${x.reason}`)].join('\n');
-    // 申込者名・電話番号・住所・顧客入力値はコピーしない。
+    const selected=items.map((r,i)=>({r,i})).filter(({r})=>all||isReviewItem(r));
+    const lines=[TITLE+' v'+VERSION,all?'全ルール':'要確認項目のみ',
+      '対象：'+(mode==='personal'?'個人':'法人'),'確認日時：'+latestAt,
+      '参照：'+source,'',...selected.map(({r,i})=>'['+r.status+'] '+r.tab+'／'+r.label+'：'+r.reason+(reviewed.has(i)?'（目視済）':''))];
+    const txt=lines.join('\n');
+    // 顧客名・連絡先・入力値は報告本文に含めない。
     const popup=document.createElement('div');popup.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#0008;display:flex;align-items:center;justify-content:center;padding:12px';
     const content=document.createElement('div');content.style.cssText='background:white;color:#263449;border-radius:10px;width:min(780px,95vw);padding:16px;box-shadow:0 10px 30px #0004';
-    content.innerHTML='<h3 style="margin:0 0 8px">結果一覧（個人情報・入力値なし）</h3><p style="font-size:12px">コピーにはチェック項目名・判定・理由のみ含みます。</p>';
+    content.innerHTML='<h3 style="margin:0 0 8px">結果一覧（顧客入力値なし）</h3><p style="font-size:12px">項目名・判定・理由・目視済状況のみ出力します。</p>';
     const area=document.createElement('textarea');area.value=txt;area.style.cssText='width:100%;height:55vh;box-sizing:border-box;padding:10px;font-size:12px';content.append(area);
     const controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;margin-top:10px;justify-content:flex-end';
-    const copy=document.createElement('button');copy.textContent='結果をコピー';copy.onclick=()=>{area.select();if(navigator.clipboard?.writeText)navigator.clipboard.writeText(txt).then(()=>{copy.textContent='コピーしました'}).catch(()=>{document.execCommand('copy')});else document.execCommand('copy');};
+    const copy=document.createElement('button');copy.textContent='結果をコピー';
+    copy.onclick=()=>{area.select();if(navigator.clipboard?.writeText)navigator.clipboard.writeText(txt).then(()=>{copy.textContent='コピーしました'}).catch(()=>{document.execCommand('copy')});else document.execCommand('copy');};
     const close=document.createElement('button');close.textContent='閉じる';close.onclick=()=>popup.remove();
     controls.append(copy,close);content.append(controls);popup.append(content);document.body.append(popup);
     popup.addEventListener('click',e=>{if(e.target===popup)popup.remove()});
   }
-  $('#ft-run').onclick=()=>{try{doAudit();say('判定しました。誤判定を避けるため未確認項目は判定保留にしています。')}catch(e){console.error('[FT Kahlua Audit] error:',e?.message);say('判定中にエラー。画面レイアウト・項目名を確認してください。')}};
+  $('#ft-run').onclick=()=>{try{doAudit();say(items.length+'件の試作ルールを判定しました。最終判断は目視でお願いします。再実行で「目視済」をリセットします。')}catch(e){console.error('[FT Kahlua Audit] error:',e?.message);say('判定中にエラー。画面レイアウト・項目名を確認してください。')}};
   $('#ft-scan').onclick=()=>sweep().catch(e=>{console.error('[FT Kahlua Audit] error:',e?.message);busy=false;$('#ft-scan').disabled=false;say('タブ巡回中にエラーが発生しました。')});
-  $('#ft-copy').onclick=copyReport;
-  $('#ft-clear').onclick=()=>{items=[];$('#ft-summary').textContent='未実行';$('#ft-results').innerHTML='<div class="ft-muted" style="padding:12px">結果を消去しました。</div>';say('')};
+  $('#ft-copy').onclick=()=>copyReport(false);
+  $('#ft-copy-all').onclick=()=>copyReport(true);
+  $('#ft-clear').onclick=()=>{items=[];reviewed.clear();filter='REVIEW';render();say('結果を消去しました。')};
   root.querySelectorAll('[data-filter]').forEach(el=>el.onclick=()=>{filter=el.dataset.filter;render()});
-  $('#ft-collapse').onclick=()=>{collapsed=!collapsed;$('.ft-inner').style.display=collapsed?'none':'';$('#ft-collapse').textContent=collapsed?'+':'−'};
+  $('#ft-collapse').onclick=()=>{collapsed=!collapsed;root.classList.toggle('ft-collapsed',collapsed);$('#ft-collapse').textContent=collapsed?'+':'−'};
+  $('#ft-close').onclick=()=>{root.remove();style.remove();};
+
   // 縮小表示時も移動できるようドラッグ位置をvw/vh内に制限。
   const drag=$('#ft-drag');let start=null;
   drag.addEventListener('pointerdown',e=>{
-    if(e.target.id==='ft-collapse')return;
+    if(e.target.closest('button'))return;
     const rect=root.getBoundingClientRect();start={x:e.clientX,y:e.clientY,left:rect.left,top:rect.top};
     drag.setPointerCapture(e.pointerId);e.preventDefault();
   });
@@ -702,5 +808,6 @@
   });
   for(const ev of ['pointerup','pointercancel'])drag.addEventListener(ev,()=>start=null);
   mode=detectMode();$('#ft-kind-label').textContent=mode==='personal'?'個人':'法人';
-  say('参照マニュアル：2026/10/29版。実装対象の最終確認は目視でお願いします。');
+  render();
+  say('参照マニュアル：2026/10/29版。詳細画面のタブを読み取って確認してください。');
 })();

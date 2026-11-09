@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BIGLOBE光｜Kahlua DB自動不備チェック Part2（個人・法人）
 // @namespace    https://first-team.local/audit
-// @version      0.1.3
+// @version      0.1.4
 // @description  読み取り専用。個人・法人、複数タブ、条件付き必須・相互照合を支援。個人情報は外部送信・コピーしません。
 // @match        https://kahlua.allconnect-wagby.jp/Kahlua/*
 // @match        https://kahlua25.allconnect-wagby.jp/Kahlua25/*
@@ -23,7 +23,7 @@
   if (document.getElementById('ft-kahlua-audit-root')) return;
 
   const TITLE = 'BIGLOBE光｜DB不備チェック Part2';
-  const VERSION = '0.1.3';
+  const VERSION = '0.1.4';
   const source = '【BIGLOBE光】DBマニュアル_261029.xlsx／【個人】DB不備チェック・【法人】DB不備チェック';
   const ST = {BAD:'要修正候補', OK:'適合候補', HOLD:'判定保留', SKIP:'対象外'};
   const clean = s => String(s ?? '').replace(/\u00a0/g,' ').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
@@ -236,8 +236,10 @@
     if(selected.length!==1)hold('説明書面進捗とユーザ備考',basic,'ユーザ備考にフローテンプレが無い／複数あるため目視確認。','ユーザ備考');
     else compare('説明書面進捗とユーザ備考',basic,progress,progress.includes(selected[0][1]),'備考のフローと説明書面進捗が一致しません。','説明書面進捗');
     if(/メール説明了承済|書面手配済/.test(progress))when('説明書面発送日',basic,true,'メール送信日／書類発送日の入力が必要です。');
-    else if(/電話説明了承済|書面発送待ち/.test(progress)) {
-      compare('説明書面発送日',basic,'進捗あり',empty(sent),'この進捗では発送日を空欄にしてください。');
+    else if(/書面発送待ち/.test(progress)) {
+      compare('説明書面発送日',basic,'進捗あり',empty(sent),'書面発送待ちは発送日を空欄にしてください。');
+    } else if(/電話説明了承済/.test(progress)) {
+      add('document_sent_phone','説明書面発送日',basic,ST.SKIP,'電話説明了承済（代替）では発送日が記載されていても不備判定しません。','説明書面発送日');
     }
     const ac=val('AC備考');
     if(ac && !/エリ確結果|エリア確認|エリ確/.test(ac))hold('AC備考：エリ確結果',basic,'エリ確結果のテンプレが見当たりません。内容を確認してください。','AC備考');
@@ -265,6 +267,21 @@
     if(filled(kind)&&filled(plan)){
       const aligned=(newLine&&/回線新規/.test(plan))||(change&&/事業者変更/.test(plan))||(transfer&&/転用/.test(plan));
       compare('申込区分とプラン整合',tab,plan,aligned,'申込区分と申込プラン情報の回線種別が一致しません。','申込プラン情報');
+    }
+    // 「★エリ確結果:ラック×★」はマンションタイプを利用できない状態。
+    // 「FM/MS/ラック×」等の未確定なテンプレ文言は自動で不備扱いしない。
+    const ac=val('AC備考');
+    const eri=ac.match(/エリ確結果\s*[:：]\s*([^\n\r★]+)/);
+    if(eri){
+      const result=norm(eri[1]);
+      const rackUnavailable=/^ラック[×x✕]/i.test(result) && !/[\/／]/.test(result);
+      if(rackUnavailable && filled(plan)){
+        const mansion=/マンション/.test(plan);
+        add('rack_x_plan','エリ確ラック×と申込プラン',tab,mansion?ST.BAD:/ファミリー/.test(plan)?ST.OK:ST.HOLD,
+          mansion?'AC備考のエリ確結果は「ラック×」ですが、申込プラン情報がマンションタイプです。ファミリータイプ等への修正要否を確認してください。':
+          /ファミリー/.test(plan)?'ラック×に対してファミリータイプが選択されています。':'ラック×のため、申込プランのタイプを確認してください。',
+          '申込プラン情報');
+      }
     }
     const approval=val('転用承諾番号／事業者変更承諾番号');
     if(newLine && filled(approval))compare('承諾番号（新規は空欄）',tab,approval,false,'回線新規では承諾番号を空欄にしてください。','転用承諾番号／事業者変更承諾番号');
@@ -356,7 +373,14 @@
     const first=val('第1希望'),week=val('最短希望曜日①');
     if(empty(first)&&empty(week))add('install_date','工事希望日：第1希望／最短希望曜日①',tab,ST.BAD,'両方未選択です。どちらか必須。','第1希望');
     else add('install_date','工事希望日：第1希望／最短希望曜日①',tab,ST.OK,'いずれか入力済。','第1希望');
-    if(!isCorp || x.newLine)must('工事費支払方法',tab);
+    // 回線新規のみ必須。転用・事業者変更では空欄が正（個人・法人共通）。
+    if(x.newLine)must('工事費支払方法',tab);
+    else if(x.transfer||x.change){
+      const method=pick('工事費支払方法');
+      if(!method)hold('工事費支払方法',tab,'項目を取得できないため、転用・事業者変更の空欄を確認してください。','工事費支払方法');
+      else add('construction_fee_transfer','工事費支払方法',tab,empty(method.value)?ST.OK:ST.BAD,
+        empty(method.value)?'転用・事業者変更のため空欄で正常です。':'転用・事業者変更の工事費支払方法は空欄が正しいため、入力内容を確認してください。','工事費支払方法');
+    } else hold('工事費支払方法',tab,'申込区分を特定できないため、入力要否を確認してください。','工事費支払方法');
     must('お客様と連絡の取りやすい曜日・時間帯',tab);
     if(isCorp){
       if(x.newLine)must('現地調査希望',tab);
@@ -366,7 +390,7 @@
     if(/引越入居予定日/.test(x.entry))hold('引越し予定日と工事希望日',tab,'引越予定日が先の場合、指定日以降①との整合を目視確認。','指定日以降①');
     const construction=norm(val('工事費支払方法'));
     const mention=x.ac.match(/工事費支払方法[^\n]*?(分割|一括)/);
-    if(mention && construction){
+    if(x.newLine && mention && construction){
       const same=mention[1]==='分割'?/割賦|分割/.test(construction):/一括/.test(construction);
       compare('工事費支払方法とAC備考',tab,construction,same,'AC備考の工事費支払方法と一致しません。','工事費支払方法');
     }

@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.4
+// @version      1.7.5
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -714,30 +714,47 @@
             :'設置先の都道府県と「タイプ3-NTT東西」の東西区分が一致しません。選択内容をご確認ください。',
           'タイプ3-NTT東西');
       }
-      // 2026/10/09マニュアルには「NTT東と西で設定値が異なるため注意」の記載のみ。
-      // 具体的なSalesforceの選択値一覧は未入手のため、東西表示が明示された値に限り機械照合。
+      // Salesforce選択肢の実画面を確認済み（2026/11/15）。
+      // 東：(NTT東) 午前フリー：9～12時／午後フリー：13～17時
+      // 西：(NTT西) AMフリー／PMフリー
+      // 選択肢は文字列を正規化して厳密に確認し、未知の表示値は誤判定せず保留にする。
       const workKind=val('タイプ3-申し込み区分');
       if(workKind!==null&&workKind.includes('新規')&&
           !/転用|事業者変更/.test(workKind)){
         const timeField=field('タイプ3-工事希望時間帯');
-        if(!unknown(timeField)&&timeField.state==='値あり'){
-          const text=normalize(timeField.value);
-          const timeEast=/(?:NTT\s*東|東日本)/.test(text);
-          const timeWest=/(?:NTT\s*西|西日本)/.test(text);
-          if(nttArea && (timeEast!==timeWest)){
-            const timeArea=timeEast?'東':'西';
+        if(unknown(timeField)){
+          pending('タイプ3-工事希望時間帯［東西照合］',292,
+            '工事希望時間帯を読み取れません。東日本・西日本それぞれの選択肢を確認してください。',
+            'タイプ3-工事希望時間帯');
+        }else if(timeField.state==='値あり'){
+          const choice=normalize(timeField.value)
+            .replace(/^[0-9]+[.．、]\s*/,'')
+            .replace(/[\s\u3000()（）]/g,'')
+            .replace(/[：]/g,':');
+          // 波ダッシュや全角チルダ、ハイフンの表記ゆれは同じ時間枠として扱う。
+          const eastAM=/^NTT東午前フリー:9[~〜～－\-ー]12時$/.test(choice);
+          const eastPM=/^NTT東午後フリー:13[~〜～－\-ー]17時$/.test(choice);
+          const westAM=/^NTT西AMフリー$/i.test(choice);
+          const westPM=/^NTT西PMフリー$/i.test(choice);
+          const timeArea=eastAM||eastPM?'東':westAM||westPM?'西':null;
+          if(!timeArea){
+            pending('タイプ3-工事希望時間帯［東西照合］',292,
+              '工事希望時間帯が確認済みの東日本2種・西日本2種のいずれにも一致しません。選択値を目視確認してください。',
+              'タイプ3-工事希望時間帯');
+          }else if(!nttArea){
+            pending('タイプ3-工事希望時間帯［東西照合］',292,
+              '時間帯の東西区分は確認できましたが「タイプ3-NTT東西」を読めないため、選択との一致を確認してください。',
+              'タイプ3-NTT東西');
+          }else{
             emit('タイプ3-工事希望時間帯［東西照合］',292,
               nttArea===timeArea?'適合候補':'要修正候補',
               nttArea===timeArea
-                ?'工事希望時間帯に表示されたNTT東西と、選択したNTT東西が一致しています。'
-                :'工事希望時間帯に表示された東西区分と、選択したNTT東西が一致しません。',
-              'タイプ3-工事希望時間帯');
-          }else{
-            pending('タイプ3-工事希望時間帯［東西照合］',292,
-              '工事希望時間帯の表示から東西専用の選択値か判別できません。NTT東西に合った時間帯か、選択肢の一覧と照合してください。',
+                ?'NTT東西の選択と、該当エリアで許可されている工事希望時間帯が一致しています。'
+                :'NTT東西の選択と、工事希望時間帯の東西区分が一致しません。東：午前/午後フリー、西：AM/PMフリーから選択してください。',
               'タイプ3-工事希望時間帯');
           }
         }
+        // 空欄の必須チェックは「タイプ3-工事希望時間帯」（292行）で実施する。
       }
 
         const appClass=val('タイプ3-申し込み区分');
@@ -1053,7 +1070,7 @@
         .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.4</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.5</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -1329,7 +1346,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート');
-      const header='FTシステム | Salesforce 不備チェック v1.7.4｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.7.5｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.3
+// @version      1.7.4
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -662,6 +662,84 @@
       } else pending('申込プラン別条件',176,'メニューからタイプ3を判別できません。','お申し込みメニュー');
 
       if(type3){
+
+      // 設置先都道府県の東西区分（ユーザー提供の17都道県／30府県）。
+      // 市区町村の一部には都道府県区分と異なるNTT収容エリアがあるため、該当地区は保留。
+      const eastPrefectures=[
+        '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+        '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+        '新潟県','山梨県','長野県'
+      ];
+      const westPrefectures=[
+        '富山県','石川県','福井県','岐阜県','静岡県','愛知県','三重県',
+        '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+        '鳥取県','島根県','岡山県','広島県','山口県','徳島県','香川県',
+        '愛媛県','高知県','福岡県','佐賀県','長崎県','熊本県','大分県',
+        '宮崎県','鹿児島県','沖縄県'
+      ];
+      const prefectureRegion=new Map();
+      for(const [names,region] of [[eastPrefectures,'東'],[westPrefectures,'西']]){
+        for(const name of names){
+          prefectureRegion.set(name,region);
+          prefectureRegion.set(name.replace(/(都|府|県)$/,''),region);
+        }
+      }
+      const prefectureField=field('都道府県');
+      const nttField=field('タイプ3-NTT東西');
+      const parsedPref=!unknown(prefectureField)&&prefectureField.state==='値あり'
+        ? normalize(prefectureField.value).replace(/^[0-9]+[.．、]\s*/,'').trim():null;
+      const prefectureArea=parsedPref?prefectureRegion.get(parsedPref)||null:null;
+      const nttRaw=!unknown(nttField)&&nttField.state==='値あり'
+        ? normalize(nttField.value).replace(/^[0-9]+[.．、]\s*/,'').replace(/\s+/g,'').trim():null;
+      const nttArea=/^(?:NTT)?東(?:日本)?$/.test(nttRaw||'')?'東':
+        /^(?:NTT)?西(?:日本)?$/.test(nttRaw||'')?'西':null;
+      const locationDetail=[val('市区郡')||'',val('町村')||''].join(' ');
+      const borderException=(parsedPref==='静岡県'||parsedPref==='静岡')&&/(?:熱海市|裾野市)/.test(locationDetail)
+        ||(parsedPref==='富山県'||parsedPref==='富山')&&/立山町/.test(locationDetail)
+        ||(parsedPref==='長野県'||parsedPref==='長野')&&/南木曽町.*田立/.test(locationDetail);
+      if(unknown(prefectureField)||!prefectureArea) {
+        pending('NTT東西［都道府県照合］',261,
+          '都道府県が不明または47都道府県に該当しないため、NTT東西との一致を判定できません。','都道府県');
+      } else if(unknown(nttField)||!nttArea) {
+        pending('NTT東西［都道府県照合］',262,
+          'NTT東西の選択を確認できません。都道府県から推定した東西区分と照合してください。','タイプ3-NTT東西');
+      } else if(borderException) {
+        pending('NTT東西［都道府県照合］',262,
+          '県境・提供エリアの例外となり得る市区町村です。都道府県だけで東西を断定せず、住所単位でNTT提供エリアを確認してください。','タイプ3-NTT東西');
+      } else {
+        emit('NTT東西［都道府県照合］',262,
+          nttArea===prefectureArea?'適合候補':'要修正候補',
+          nttArea===prefectureArea
+            ?'都道府県とNTT東西の区分が一致しています（個別住所の提供判定とは異なります）。'
+            :'設置先の都道府県と「タイプ3-NTT東西」の東西区分が一致しません。選択内容をご確認ください。',
+          'タイプ3-NTT東西');
+      }
+      // 2026/10/09マニュアルには「NTT東と西で設定値が異なるため注意」の記載のみ。
+      // 具体的なSalesforceの選択値一覧は未入手のため、東西表示が明示された値に限り機械照合。
+      const workKind=val('タイプ3-申し込み区分');
+      if(workKind!==null&&workKind.includes('新規')&&
+          !/転用|事業者変更/.test(workKind)){
+        const timeField=field('タイプ3-工事希望時間帯');
+        if(!unknown(timeField)&&timeField.state==='値あり'){
+          const text=normalize(timeField.value);
+          const timeEast=/(?:NTT\s*東|東日本)/.test(text);
+          const timeWest=/(?:NTT\s*西|西日本)/.test(text);
+          if(nttArea && (timeEast!==timeWest)){
+            const timeArea=timeEast?'東':'西';
+            emit('タイプ3-工事希望時間帯［東西照合］',292,
+              nttArea===timeArea?'適合候補':'要修正候補',
+              nttArea===timeArea
+                ?'工事希望時間帯に表示されたNTT東西と、選択したNTT東西が一致しています。'
+                :'工事希望時間帯に表示された東西区分と、選択したNTT東西が一致しません。',
+              'タイプ3-工事希望時間帯');
+          }else{
+            pending('タイプ3-工事希望時間帯［東西照合］',292,
+              '工事希望時間帯の表示から東西専用の選択値か判別できません。NTT東西に合った時間帯か、選択肢の一覧と照合してください。',
+              'タイプ3-工事希望時間帯');
+          }
+        }
+      }
+
         const appClass=val('タイプ3-申し込み区分');
         if(appClass===null)pending('タイプ3-新規／転用／事変',263,'申込区分を読み取れません。','タイプ3-申し込み区分');
         else {
@@ -975,7 +1053,7 @@
         .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.3</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.4</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
@@ -1251,7 +1329,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート');
-      const header='FTシステム | Salesforce 不備チェック v1.7.3｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.7.4｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}

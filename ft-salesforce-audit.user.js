@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.7
+// @version      1.7.8
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -380,6 +380,53 @@
     // 原本の2026/11/20版「DB不備チェック」シート。P=BIG、Q=KDDI。
     // 項目ごとに「必須」「選択不要」「条件によって」を区別し、条件付きは専用判定で評価。
     const manualEntryRules=new Map([["申込者名",{"row":30,"big":"必須","kddi":"必須"}],["性別",{"row":33,"big":"必須","kddi":"必須"}],["申込者生年月日",{"row":35,"big":"必須","kddi":"必須"}],["携帯電話番号(日中連絡先)",{"row":36,"big":"必須","kddi":"必須"}],["携帯電話番号",{"row":37,"big":"必須","kddi":"必須"}],["申込者メールアドレス",{"row":38,"big":"条件によって","kddi":"条件によって"}],["説明書面進捗",{"row":48,"big":"必須","kddi":"必須"}],["説明書面発送日",{"row":51,"big":"必須","kddi":"必須"}],["選択ルート",{"row":55,"big":"タイプ③必須","kddi":"タイプ③必須"}],["対応拠点",{"row":56,"big":"タイプ③必須","kddi":"タイプ③必須"}],["固定電話番号",{"row":123,"big":"条件によって","kddi":"条件によって"}],["契約タイプ",{"row":124,"big":"必須","kddi":"必須"}],["契約者性別",{"row":125,"big":"必須","kddi":"必須"}],["契約者名(姓カナ)",{"row":126,"big":"必須","kddi":"必須"}],["契約者名(名カナ)",{"row":128,"big":"必須","kddi":"必須"}],["契約者名(姓)",{"row":130,"big":"必須","kddi":"必須"}],["契約者名(名)",{"row":132,"big":"必須","kddi":"必須"}],["契約者生年月日",{"row":134,"big":"必須","kddi":"必須"}],["契約者連絡先電話番号1",{"row":135,"big":"必須","kddi":"必須"}],["契約者連絡先電話番号2",{"row":137,"big":"任意","kddi":"条件によって"}],["契約者メールアドレス",{"row":138,"big":"任意","kddi":"条件によって"}],["郵便番号",{"row":145,"big":"必須","kddi":"必須"}],["都道府県",{"row":146,"big":"必須","kddi":"必須"}],["市区郡",{"row":147,"big":"必須","kddi":"必須"}],["町村",{"row":148,"big":"必須","kddi":"必須"}],["丁目",{"row":149,"big":"必須","kddi":"必須"}],["番地",{"row":150,"big":"必須","kddi":"必須"}],["建物",{"row":151,"big":"任意","kddi":"条件によって"}],["棟",{"row":152,"big":"任意","kddi":"条件によって"}],["部屋番号",{"row":153,"big":"任意","kddi":"条件によって"}],["トス成功",{"row":160,"big":"条件によって","kddi":"条件によって"}],["CB案内用メールアドレス",{"row":167,"big":"条件によって","kddi":"条件によって"}],["CB理由",{"row":168,"big":"条件によって","kddi":"条件によって"}],["CB金額",{"row":173,"big":"条件によって","kddi":"条件によって"}],["CB備考※なくても不備ではない",{"row":174,"big":"条件によって","kddi":"条件によって"}],["申込書番号",{"row":181,"big":"記載不可","kddi":"記載不可"}],["設置先住所と異なる",{"row":188,"big":"選択不要","kddi":"必須"}],["設置先入居予定日",{"row":189,"big":"引越しがある場合記載必須","kddi":"条件によって"}],["契約者住所_郵便番号",{"row":190,"big":"引越しがある場合記載必須","kddi":"条件によって"}],["契約者住所_都道府県",{"row":191,"big":"引越しがある場合記載必須","kddi":"条件によって"}],["契約者住所_市区町村",{"row":192,"big":"引越しがある場合記載必須","kddi":"条件によって"}],["契約者住所_番地",{"row":193,"big":"引越しがある場合記載必須","kddi":"条件によって"}],["契約者住所_建物・棟",{"row":195,"big":"任意","kddi":"条件によって"}],["契約者住所_部屋番号",{"row":196,"big":"任意","kddi":"条件によって"}],["お申し込みのプロバイダ",{"row":203,"big":"必須","kddi":"必須"}],["お申し込みメニュー",{"row":212,"big":"必須","kddi":"必須"}],["回線速度",{"row":213,"big":"\"タイプ1","kddi":"タイプ3の場合必須\""}],["お申し込み内容",{"row":215,"big":"選択不要","kddi":"必須"}],["プロバイダID",{"row":216,"big":"BIGLOBE会員が「既存会員」の場合必須","kddi":"条件によって"}],["メールアドレス",{"row":221,"big":"選択不要","kddi":"条件によって"}],["Wi-Fiパック",{"row":226,"big":"必須","kddi":"必須"}],["Wi-Fiメッシュ子機",{"row":227,"big":"メッシュ子機申込有無が「申込有」の場合必須","kddi":"条件によって"}],["KDDI使用欄",{"row":228,"big":"必須","kddi":"条件によって"}],["プロバイダOP1",{"row":236,"big":"必須","kddi":"必須"}],["プロバイダOP2",{"row":240,"big":"必須","kddi":"条件によって"}],["プロバイダOP3",{"row":241,"big":"必須","kddi":"条件によって"}],["プロバイダOP4",{"row":242,"big":"必須","kddi":"条件によって"}],["プロバイダOP5",{"row":243,"big":"必須","kddi":"条件によって"}],["プロバイダOP6",{"row":244,"big":"必須","kddi":"条件によって"}],["プロバイダOP7",{"row":245,"big":"必須","kddi":"条件によって"}],["プロバイダOP8",{"row":246,"big":"必須","kddi":"条件によって"}],["プロバイダOP9",{"row":247,"big":"必須","kddi":"条件によって"}],["プロバイダOP10",{"row":248,"big":"必須","kddi":"条件によって"}],["プロバイダOP11",{"row":249,"big":"必須","kddi":"条件によって"}],["プロバイダOP12",{"row":250,"big":"必須","kddi":"条件によって"}],["プロバイダOP13",{"row":251,"big":"必須","kddi":"条件によって"}],["プロバイダOP14",{"row":252,"big":"必須","kddi":"条件によって"}],["プロバイダOP15",{"row":253,"big":"必須","kddi":"条件によって"}],["電話サービス申込方法",{"row":260,"big":"必須","kddi":"必須"}],["電話(K)-電話番号選択",{"row":262,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-番ポ旧事業者コード",{"row":263,"big":"0AB-J番号取得方法が「ポータビリティ」の場合必須","kddi":"条件によって"}],["電話(K)-電話番号",{"row":264,"big":"条件によって","kddi":"条件によって"}],["電話(K)-ご契約者名姓カナ",{"row":265,"big":"電話(K)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(K)-ご契約者名名カナ",{"row":266,"big":"電話(K)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(K)-ご契約者名姓漢字",{"row":267,"big":"電話(K)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(K)-ご契約者名名漢字",{"row":268,"big":"電話(K)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(K)-紙明細出力申込有無",{"row":269,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-割込通話申込有無",{"row":270,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-発信番号表示申込有無",{"row":271,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-番号通知リクエスト申込有無",{"row":272,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-迷惑電話撃退申込有無",{"row":273,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-割込番号表示申込有無",{"row":274,"big":"5G回線電話申込有無が「申込有」、かつ割込通話サービス申込有無が「申込有」、かつ発信番号表示サービス申込有無が「申込有」の場合必須","kddi":"条件によって"}],["電話(K)-着信転送申込有無",{"row":275,"big":"5G回線電話申込有無が「申込有」の場合必須","kddi":"条件によって"}],["電話(K)-迷惑電話発着信ブロック申込有無",{"row":276,"big":"5G回線電話申込有無が「申込有」の場合必須","kddi":"条件によって"}],["電話(K)-発信者番号通知",{"row":277,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["電話(K)-番号案内電話帳掲載",{"row":278,"big":"5G電話申込有無が「申込有」の場合","kddi":"条件によって"}],["タイプ1-所有区分",{"row":285,"big":"選択不要","kddi":"条件によって"}],["タイプ1-設置先階数",{"row":286,"big":"選択不要","kddi":"条件によって"}],["タイプ1-auひかりテレビお申し込み",{"row":287,"big":"選択不要","kddi":"条件によって"}],["タイプ1-チャンネルパック",{"row":288,"big":"選択不要","kddi":"条件によって"}],["タイプ1-ご利用中の光回線",{"row":289,"big":"選択不要","kddi":"必須"}],["タイプ1-光回線再利用有無",{"row":290,"big":"選択不要","kddi":"条件によって"}],["タイプ1-光回線再利用承諾番号",{"row":291,"big":"選択不要","kddi":"条件によって"}],["タイプ1-特記事項(開通部門引継)",{"row":292,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事予約ID",{"row":295,"big":"選択不要","kddi":"-"}],["タイプ1-工事希望日1",{"row":296,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事希望時間帯1",{"row":297,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事希望日2",{"row":298,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事希望時間帯2",{"row":299,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事希望日3",{"row":300,"big":"選択不要","kddi":"条件によって"}],["タイプ1-工事希望時間帯3",{"row":301,"big":"選択不要","kddi":"条件によって"}],["タイプ1-廃止済回線流用希望",{"row":302,"big":"選択不要","kddi":"条件によって"}],["販社名(不動産代理店用)",{"row":309,"big":"条件によって","kddi":"条件によって"}],["販社名(不動産代理店用)ID",{"row":310,"big":"条件によって","kddi":"条件によって"}],["タイプ3-回線設置先建物種別",{"row":311,"big":"必須","kddi":"必須"}],["タイプ3-回線設置先建物",{"row":312,"big":"必須","kddi":"選択不要"}],["タイプ3-回線設置先建物(戸数)",{"row":313,"big":"必須","kddi":"選択不要"}],["タイプ3-NTT東西",{"row":314,"big":"選択不要","kddi":"必須"}],["タイプ3-申し込み区分",{"row":315,"big":"必須","kddi":"必須"}],["タイプ3-既存プロバイダ契約有無",{"row":316,"big":"必須","kddi":"必須"}],["タイプ3-他社光コラボ利用有無",{"row":317,"big":"選択不要","kddi":"必須"}],["タイプ3-現在利用中の回線",{"row":318,"big":"選択不要","kddi":"条件によって"}],["タイプ3-既設回線有無",{"row":319,"big":"任意","kddi":"選択不要"}],["タイプ3-変更元事業者",{"row":320,"big":"任意","kddi":"条件によって"}],["タイプ3-利用中回線名義(カナ)(姓)",{"row":321,"big":"転用or事業者変更の場合、漢字かカナどちらか必須","kddi":"条件によって"}],["タイプ3-利用中回線名義(カナ)(名)",{"row":322,"big":"転用or事業者変更の場合、漢字かカナどちらか必須","kddi":"条件によって"}],["タイプ3-利用中回線名義(漢字)(姓)",{"row":323,"big":"転用or事業者変更の場合、漢字かカナどちらか必須","kddi":"条件によって"}],["タイプ3-利用中回線名義(漢字)(名)",{"row":324,"big":"転用or事業者変更の場合、漢字かカナどちらか必須","kddi":"条件によって"}],["タイプ3-転用事業者承諾番号",{"row":325,"big":"回線が「転用」「事業者変更」の場合必須","kddi":"条件によって"}],["タイプ3-ひかり電話利用状況",{"row":326,"big":"選択不要","kddi":"必須"}],["電話(N)-電話プラン",{"row":329,"big":"コラボ電話「申込有」の場合必須","kddi":"選択不要"}],["電話(N)-電話番号選択",{"row":330,"big":"選択不要","kddi":"条件によって"}],["電話(N)-電話番号",{"row":337,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-番ポ旧事業者コード",{"row":338,"big":"電話申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-番号ポータビリティ元事業者名(その他詳細)",{"row":342,"big":"電話申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-番ポ契約者姓カナ",{"row":343,"big":"電話(N)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-番ポ契約者名カナ",{"row":344,"big":"電話(N)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-番ポ契約者姓漢字",{"row":345,"big":"電話(N)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-番ポ契約者名漢字",{"row":346,"big":"電話(N)申込ありかつ、ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-電話加入権",{"row":347,"big":"コラボ電話「申込有」かつ、コラボ電話ポータビリティの場合必須","kddi":"条件によって"}],["電話(N)-割込電話申込有無",{"row":348,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-番号表示申込有無",{"row":349,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-ナンバーリクエスト申込有無",{"row":350,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-迷惑電話撃退申込有無",{"row":351,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-複数チャネルサービス申込有無",{"row":352,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-着信お知らせメール申込有無",{"row":353,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-発信者番号通知",{"row":354,"big":"コラボ電話「申込有」の場合必須","kddi":"条件によって"}],["電話(N)-国際電話の発信制限",{"row":356,"big":"回線が「回線新規」の場合かつ、コラボ電話「申込有」の場合必須","kddi":"選択不要"}],["電話(N)-着信転送申込有無",{"row":357,"big":"コラボ電話「申込有」の場合必須","kddi":"選択不要"}],["電話(N)-FAXお知らせメール申込有無",{"row":358,"big":"コラボ電話「申込有」の場合必須","kddi":"選択不要"}],["タイプ3-コラボ光テレビお申し込み",{"row":359,"big":"必須","kddi":"必須"}],["タイプ3-ISP使用欄",{"row":364,"big":"選択不要","kddi":"条件によって"}],["タイプ3-工事希望日(西暦)",{"row":365,"big":"選択不要","kddi":"条件によって"}],["タイプ3-工事希望時間帯",{"row":367,"big":"選択不要","kddi":"条件によって"}],["タイプ3-転用/事業者変更希望日",{"row":369,"big":"選択不要","kddi":"条件によって"}],["タイプ3-工事手配調整情報",{"row":371,"big":"任意","kddi":"選択不要"}],["タイプ3-お客様と連絡の取りやすい曜日・時間帯",{"row":373,"big":"任意","kddi":"選択不要"}],["タイプ3-備考・修正箇所",{"row":375,"big":"任意","kddi":"選択不要"}],["本人確認方法(携帯法用)",{"row":382,"big":"選択不要","kddi":"必須"}],["本人確認種別(犯収法用)",{"row":383,"big":"選択不要","kddi":"条件によって"}],["本人確認日(犯収法用)",{"row":385,"big":"選択不要","kddi":"条件によって"}],["本人確認時刻(犯収法用)",{"row":387,"big":"選択不要","kddi":"条件によって"}],["本人確認実施担当者氏名(携帯法/犯収法用)",{"row":389,"big":"選択不要","kddi":"条件によって"}],["職業",{"row":393,"big":"電話申込希望有無が「希望有」の場合必須","kddi":"条件によって"}],["職業備考欄",{"row":398,"big":"任意","kddi":"条件によって"}],["利用用途(個人)",{"row":400,"big":"電話申込希望有無が「希望有」の場合必須","kddi":"条件によって"}],["疑わしい取引該当フラグ",{"row":405,"big":"選択不要","kddi":"条件によって"}],["必要項目備考欄",{"row":407,"big":"選択不要","kddi":"条件によって"}],["初期費用請求区分",{"row":415,"big":"\"タイプ1","kddi":"タイプ3の場合必須\""}],["KDDI紙請求書",{"row":418,"big":"選択不要","kddi":"必須"}],["特記事項2",{"row":449,"big":"","kddi":"-"}],["対応日",{"row":456,"big":"-","kddi":"-"}],["対応者",{"row":457,"big":"-","kddi":"-"}],["FC待ち日",{"row":458,"big":"-","kddi":"-"}],["対応進捗",{"row":459,"big":"必須","kddi":"必須"}],["前後確転送",{"row":460,"big":"-","kddi":"-"}],["対応商材",{"row":461,"big":"必須","kddi":"必須"}],["失注リスト獲得拠点",{"row":462,"big":"-","kddi":"-"}],["前後確一本化案件",{"row":463,"big":"条件によって","kddi":"条件によって"}],["スタートサポート書類",{"row":470,"big":"必須","kddi":"必須"}],["工事担当共有事項",{"row":471,"big":"-","kddi":"-"}],["待ちエントリ日",{"row":472,"big":"記載不可","kddi":"記載不可"}],["携帯トス成功可否",{"row":479,"big":"選択不要","kddi":"必須"}],["携帯トス失敗理由",{"row":480,"big":"選択不要","kddi":"条件によって"}],["トス時携帯キャリア",{"row":481,"big":"選択不要","kddi":"条件によって"}],["携帯トス投入日",{"row":482,"big":"選択不要","kddi":"条件によって"}],["バレッドライフコンシェルジュ成功可否",{"row":489,"big":"選択不要","kddi":"必須"}],["バレッドライフコンシェルジュ失敗理由",{"row":490,"big":"選択不要","kddi":"条件によって"}],["バレッドライフコンシェルジュ投入日",{"row":491,"big":"選択不要","kddi":"条件によって"}]]);
+
+    // マニュアル2026/11/20「エントリ先判断」：
+    // タイプ3 nifty→KDDI / BIG+本人限定郵便→KDDI / BIG+eKYC→BIG。
+    // BIGでスマホ所持が確認できた場合はBIG候補。選択済の本人確認方法を最優先する。
+    // マニュアルの条件をSalesforce画面で確認できない場合は自動選択しない。
+    function inferEntryRoute(fields){
+      const labelKey=v=>normalize(v).replace(/[\s\u3000]/g,'');
+      const selected=(f)=>f && f.state==='値あり' && hasFieldValue(f.value);
+      const vals=fields.filter(selected);
+      const menu=vals.filter(f=>/^(?:お申し込みメニュー|お申込みメニュー)$/.test(labelKey(f.name)));
+      if(!menu.some(f=>/タイプ(?:3|③)/.test(normalize(f.value)))){
+        return {route:null,reason:'タイプ3の申込メニューを確認できません。',signal:'unresolved'};
+      }
+      const providerLabels=/^(?:お申し込みのプロバイダ|お申込みのプロバイダ|申込ISP|申込みISP|ISP|ISP名|申込プロバイダ|申込みプロバイダ|プロバイダ名)$/i;
+      let providerFields=vals.filter(f=>providerLabels.test(labelKey(f.name)));
+      // ISP専用項目が読み取れないときのみ、タイプ3のメニュー名を補助的に参照。
+      if(!providerFields.length)providerFields=menu;
+      const p=providerFields.map(f=>normalize(f.value)).join(' ');
+      const nifty=/(?:@?nifty|ニフティ)/i.test(p);
+      const big=/(?:biglobe|ビッグローブ|(?:^|[^a-z])big(?:$|[^a-z]))/i.test(p);
+      if(nifty&&big||!nifty&&!big){
+        return {route:null,reason:'ISPをBIGまたはniftyとして確定できません。',signal:'unresolved'};
+      }
+      if(nifty)return {route:'KDDI',reason:'タイプ3・ISP nifty',signal:'nifty'};
+      const methodLabels=/(?:本人確認|本人認証|本人限定|電子認証|認証方式|e[\s-]*kyc|エントリ(?:先|方式|方法))/i;
+      const methodValues=vals.filter(f=>methodLabels.test(labelKey(f.name))&&
+        !/(?:氏名|担当者|生年月日|確認日|時刻|備考|ログ|履歴)/.test(labelKey(f.name)));
+      let mail=false,ekyc=false;
+      for(const f of methodValues){
+        const val=normalize(f.value).replace(/[\s\u3000]+/g,'');
+        // 申込方法を表す実際の選択値だけを利用。否定的な記載は根拠にしない。
+        if(/(?:不可|対象外|未実施|しない|申込なし|利用しない|不使用|NG)$/.test(val))continue;
+        if(/本人限定(?:受取)?郵便/.test(val))mail=true;
+        if(/(?:e-?kyc|オンライン本人確認|電子本人確認)/i.test(val))ekyc=true;
+      }
+      if(mail&&ekyc)return {route:null,reason:'本人限定郵便とeKYCの両方が検出されました。確認方式を目視確認してください。',signal:'conflict'};
+      if(mail)return {route:'KDDI',reason:'タイプ3・ISP BIG・本人限定郵便',signal:'mail'};
+      if(ekyc)return {route:'BIG',reason:'タイプ3・ISP BIG・eKYC',signal:'ekyc'};
+      const smartphoneLabels=/(?:スマホ|スマートフォン|smartphone).*(?:持|保有|所持|所有|有無|利用可否|使用可否)|(?:端末所持|端末保有)/i;
+      const yes=/^(?:有|有り|あり|はい|YES|持っている|所持あり|保有あり|利用可能|利用可|使用可|可能|スマホあり|スマートフォンあり)$/i;
+      const smartphone=vals.some(f=>{
+        const fieldName=labelKey(f.name);
+        return smartphoneLabels.test(fieldName) && yes.test(normalize(f.value).trim());
+      });
+      if(smartphone)return {route:'BIG',reason:'タイプ3・ISP BIG・スマホ所持あり（確認方式は未特定）',signal:'smartphone'};
+      return {route:null,reason:'BIG案件ですが、本人限定郵便・eKYC・スマホ所持のいずれも画面から判定できません。',signal:'unresolved'};
+    }
     function runRules(fields,entryRoute) {
       if(entryRoute!=='BIG'&&entryRoute!=='KDDI') throw new Error('エントリー経由未選択');
       const byName = new Map();
@@ -1104,13 +1151,14 @@
         .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.7</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.8</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="entryModeRow"><label for="entryRoute">エントリー経由</label>
         <select id="entryRoute" aria-label="エントリー経由">
-        <option value="">選択してください</option><option value="BIG">BIG経由（P列）</option>
-        <option value="KDDI">KDDI経由（Q列）</option></select><small>マニュアル 2026/11/20</small></div>
+        <option value="AUTO">自動判定（推奨）</option><option value="BIG">BIG経由（P列・手動）</option>
+        <option value="KDDI">KDDI経由（Q列・手動）</option></select><small>マニュアル 2026/11/20</small>
+        <div id="entryRouteResult" role="status" style="width:100%;color:#445b6c">チェック時にISPと本人確認方式から判定します。</div></div>
         <div class="buttons"><button id="run" class="primary" type="button">不備候補を確認</button><button id="copy" type="button" disabled>要確認だけコピー</button><button id="copyAll" type="button" disabled>全結果コピー</button></div>
         <div id="status" role="status">詳細タブを開いて実行してください。閉じた項目セクションはチェック時に一時展開します。</div>
         <div id="resultBanner" class="resultBanner" role="status" aria-live="polite"></div>
@@ -1346,14 +1394,13 @@
       $('copyFallback').style.display='none';$('status').textContent=message;
     }
     $('entryRoute').addEventListener('change',()=>{
-      if(latest)clearResults('エントリー経由を変更しました。再チェックしてください。');
+      $('entryRouteResult').textContent=$('entryRoute').value==='AUTO'
+        ?'チェック時にISPと本人確認方式から判定します。'
+        :'手動選択中です。案件が変わったら経由を再確認してください。';
+      if(latest)clearResults('エントリー経由の判定方式を変更しました。再チェックしてください。');
     });
     $('run').addEventListener('click',async()=>{
-      const entryRoute=$('entryRoute').value;
-      if(entryRoute!=='BIG'&&entryRoute!=='KDDI'){
-        clearResults('エントリー経由をBIGかKDDIから選択してください。未選択では判定しません。');
-        return;
-      }
+      const routeMode=$('entryRoute').value;
       if (!isRecordDetailPage()) {
         $('status').textContent='申込共通の案件詳細画面でのみ実行できます。対象画面を開いてください。';
         return;
@@ -1378,7 +1425,27 @@
           clearResults('タイプ1・タイプ2は現在の業務対象外のため、チェックを実行しません。');
           return;
         }
-        const res=runRules(d.fields,entryRoute);reviewed.clear();latest={fieldCount:d.fields.length,results:res,unfinished:expansion.unopened,entryRoute};
+        const inference=inferEntryRoute(d.fields);
+        const entryRoute=routeMode==='AUTO'?inference.route:routeMode;
+        const routeSummary=routeMode==='AUTO'
+          ?(entryRoute?'自動判定：'+(entryRoute==='BIG'?'BIG経由（P列）':'KDDI経由（Q列）')+'｜'+inference.reason:'自動判定不可：'+inference.reason)
+          :'手動指定：'+(entryRoute==='BIG'?'BIG経由（P列）':'KDDI経由（Q列）')+
+            (inference.route&&inference.route!==entryRoute?'｜自動判定と不一致。確認してください。':'');
+        $('entryRouteResult').textContent=routeSummary;
+        if(!entryRoute){
+          clearResults('エントリー経由を自動判定できませんでした。本人確認方式を確認し、BIG経由かKDDI経由を手動選択して再実行してください。');
+          return;
+        }
+        const res=runRules(d.fields,entryRoute);
+        if(routeMode!=='AUTO'&&inference.route&&inference.route!==entryRoute){
+          const isp=d.fields.find(f=>/^(?:お申し込みのプロバイダ|ISP|申込ISP)$/.test(normalize(f.name)))||null;
+          res.unshift({
+            label:'エントリー経由［手動選択と自動判定の相違］',row:0,status:'判定保留',
+            reason:'手動選択した経由と、ISP・本人確認方式から推定した経由が異なります。経由を確認してください。',
+            target:isp?.labelNode||null,targetLabel:isp?.name||'お申し込みのプロバイダ',targetSection:isp?.section||''
+          });
+        }
+        reviewed.clear();latest={fieldCount:d.fields.length,results:res,unfinished:expansion.unopened,entryRoute,routeMode};
         const unfinished=expansion.unopened;
         $('status').textContent=`${res.length}件の試作ルールを判定しました。${unfinished?'展開できないセクションが'+unfinished+'件あり、該当項目は目視確認が必要です。':'閉じていたセクションも読み取りました。'} 最終判断は目視でお願いします。再実行で目視済チェックはリセットされます。`;
         $('copy').disabled=false;$('copyAll').disabled=false;$('copyFallback').style.display='none';filter='未確認';draw();
@@ -1392,8 +1459,8 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート');
-      const header='FTシステム | Salesforce 不備チェック v1.7.7｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
-      const t=header+'\nエントリー経由：'+latest.entryRoute+'（'+(latest.entryRoute==='BIG'?'P':'Q')+'列）\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
+      const header='FTシステム | Salesforce 不備チェック v1.7.8｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const t=header+'\nエントリー経由：'+latest.entryRoute+'（'+(latest.entryRoute==='BIG'?'P':'Q')+'列・'+(latest.routeMode==='AUTO'?'自動判定':'手動指定')+'）\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}
       catch{$('backup').focus();$('backup').select();$('status').textContent='自動コピー不可：下のテキストを Ctrl+C でコピーしてください。';}

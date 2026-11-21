@@ -2,7 +2,7 @@
 // @name         FT | Salesforce 不備チェック補助 v1.4（パネル移動対応）
 // @name:ja      FTシステム | Salesforce 不備チェック
 // @namespace    https://firstteam.local/userscripts
-// @version      1.7.8
+// @version      1.7.9
 // @updateURL    https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @downloadURL  https://raw.githubusercontent.com/fttmgotanda-blip/ft-salesforce-audit/main/ft-salesforce-audit.user.js
 // @description  Salesforceの画面表示値をブラウザ内でマニュアル条件と照合する試作版。外部送信・編集・保存なし。
@@ -681,11 +681,9 @@
         required('タイプ3-回線設置先建物(戸数）',0,'BIG経由のP列では必須です。');
         required('KDDI使用欄',0,'BIG経由のP列では必須です。');
       }
-      // P列ではプロバイダOP2～15の選択が必須。これまでの「一本化対象だけ照合」を維持。
-      if(entryRoute==='BIG'&&opCheckEnabled){
-        for(let i=2;i<=15;i++)required('プロバイダOP'+i,0,
-          'BIG経由のP列では選択が必要です。申込なしも選択状態を確認してください。');
-      }
+      // OP2～16は投入備考の実申込サービスと照合して判断する。
+      // P列の「必須」を全OP欄の一律入力必須と解釈しない（未申込OP欄は空欄可）。
+      // OP1の「おトクプラン」は下の独立した必須チェックを維持する。
 
       if(opCheckEnabled){
         const op=field('プロバイダOP1');
@@ -1151,7 +1149,7 @@
         .resultBanner span{display:block;font-size:11px;margin-top:4px}
         .hidden .body{display:none}.hidden .head{border-radius:9px}textarea{width:100%;font:11px monospace;min-height:115px}
       </style>
-      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.8</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
+      <div class="panel"><div class="head" title="ドラッグで移動できます"><span>auひかりプラス｜DB不備チェック v1.7.9</span><div><button id="fold" type="button" title="折りたたみ・展開">−</button><button id="close" type="button" title="閉じる">×</button></div></div>
       <div class="body">
         <div class="reviewNotice">このツールは確認箇所を示す補助です。「目視済」はその項目の確認記録であり、案件の合格・差戻し確定ではありません。最終判断は担当者がマニュアルをもとに実施してください。</div>
         <div class="entryModeRow"><label for="entryRoute">エントリー経由</label>
@@ -1459,7 +1457,7 @@
     async function copyResults(all){
       if(!latest)return;
       const chosen=all?latest.results:latest.results.filter(r=>r.status==='要修正候補'||r.status==='判定保留'||r.status==='業務アラート');
-      const header='FTシステム | Salesforce 不備チェック v1.7.8｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
+      const header='FTシステム | Salesforce 不備チェック v1.7.9｜'+(all?'全ルール':'要修正候補・判定保留のみ')+'（顧客入力値・URLなし）';
       const t=header+'\nエントリー経由：'+latest.entryRoute+'（'+(latest.entryRoute==='BIG'?'P':'Q')+'列・'+(latest.routeMode==='AUTO'?'自動判定':'手動指定')+'）\n'+opSummaryLine(summarizeOp(latest.results))+'\n'+chosen.map(r=>[r.label,Number.isInteger(r.row)&&r.row>0?'行'+r.row:'',r.status,r.reason].join('\t')).join('\n');
       $('copyFallback').style.display='block';$('backup').value=t;
       try{await navigator.clipboard.writeText(t);$('status').textContent=`${chosen.length}件をコピーしました。入力値・URLは含みません。`;}
